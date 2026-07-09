@@ -16,7 +16,9 @@ namespace TestFXTrade.Fx.UI
     [DefaultExecutionOrder(-500)]
     public sealed class FxTradeAdvisorApp : MonoBehaviour
     {
-        private const float AutoRefreshSeconds = 60f;
+        private const float QuoteRefreshSeconds = 5f;
+        private const float CandleRefreshSeconds = 60f;
+        private const int CandleOutputSize = 160;
         private static readonly Vector2 MobileReferenceResolution = new Vector2(390f, 844f);
 
         private Font font;
@@ -43,9 +45,15 @@ namespace TestFXTrade.Fx.UI
         private UsdJpyTrendLineGraphic chartGraphic;
 
         private readonly RecommendationEngine recommendationEngine = new RecommendationEngine();
-        private CancellationTokenSource refreshCancellation;
+        private readonly List<Candle> latestCandles = new List<Candle>();
+        private CancellationTokenSource marketDataCancellation;
+        private IFxMarketDataProvider marketDataProvider;
+        private MarketQuote latestQuote;
         private string apiKey = string.Empty;
-        private float nextAutoRefreshAt;
+        private float nextQuoteRefreshAt;
+        private float nextCandleRefreshAt;
+        private bool quoteRefreshInFlight;
+        private bool candleRefreshInFlight;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Bootstrap()
@@ -79,33 +87,48 @@ namespace TestFXTrade.Fx.UI
 
             if (settings.HasApiKey)
             {
+                marketDataProvider = new TwelveDataMarketDataProvider(apiKey);
                 marketSourceText.text = $"Market data: Twelve Data ({settings.SourceLabel})";
                 SetStatus("Local API key loaded. Refreshing live USD/JPY data.");
-                nextAutoRefreshAt = Time.time + AutoRefreshSeconds;
-                _ = RefreshAsync();
+                nextQuoteRefreshAt = Time.time + QuoteRefreshSeconds;
+                nextCandleRefreshAt = Time.time + CandleRefreshSeconds;
+                _ = RefreshCandlesAndQuoteAsync(true);
                 return;
             }
 
             marketSourceText.text = $"Market data: missing {LocalFxSettings.ApiKeyVariableName}";
             SetStatus("Add TWELVE_DATA_API_KEY to .env before starting the app.");
             warningsText.text = "Create .env from .env.example in the project root, then restart.";
-            nextAutoRefreshAt = float.PositiveInfinity;
+            nextQuoteRefreshAt = float.PositiveInfinity;
+            nextCandleRefreshAt = float.PositiveInfinity;
         }
 
         private void Update()
         {
-            if (string.IsNullOrWhiteSpace(apiKey) || !autoRefreshToggle.isOn || Time.time < nextAutoRefreshAt)
+            if (string.IsNullOrWhiteSpace(apiKey) || !autoRefreshToggle.isOn)
             {
                 return;
             }
 
-            nextAutoRefreshAt = Time.time + AutoRefreshSeconds;
-            _ = RefreshAsync();
+            float now = Time.time;
+            if (!quoteRefreshInFlight && !candleRefreshInFlight && now >= nextCandleRefreshAt)
+            {
+                nextCandleRefreshAt = now + CandleRefreshSeconds;
+                nextQuoteRefreshAt = now + QuoteRefreshSeconds;
+                _ = RefreshCandlesAndQuoteAsync(false);
+                return;
+            }
+
+            if (!quoteRefreshInFlight && !candleRefreshInFlight && now >= nextQuoteRefreshAt)
+            {
+                nextQuoteRefreshAt = now + QuoteRefreshSeconds;
+                _ = RefreshLatestQuoteAsync(false);
+            }
         }
 
         private void OnDestroy()
         {
-            CancelRefresh();
+            CancelMarketDataRequests();
         }
 
         private void BuildUi()
@@ -170,10 +193,11 @@ namespace TestFXTrade.Fx.UI
             AddSectionTitle(parent, "Market");
             AddValueRow(parent, "Currency Pair", FxConstants.UsdJpySymbol);
             intervalDropdown = AddDropdown(parent, "Candle Interval", new List<string> { "1min", "5min", "15min" }, 1);
-            autoRefreshToggle = AddToggle(parent, "Auto Refresh 60s", true);
+            intervalDropdown.onValueChanged.AddListener(unused => { _ = RefreshCandlesAndQuoteAsync(true); });
+            autoRefreshToggle = AddToggle(parent, "Live Refresh 5s", true);
 
             Button refreshButton = AddButton(parent, "Refresh Live Chart");
-            refreshButton.onClick.AddListener(() => _ = RefreshAsync());
+            refreshButton.onClick.AddListener(() => _ = RefreshCandlesAndQuoteAsync(true));
 
             statusText = AddSmallText(parent, string.Empty);
             statusText.color = new Color32(190, 198, 210, 255);
@@ -229,12 +253,23 @@ namespace TestFXTrade.Fx.UI
             warningsText.color = new Color32(244, 192, 102, 255);
         }
 
-        private async Task RefreshAsync()
+        private async Task RefreshCandlesAndQuoteAsync(bool manual)
         {
-            CancelRefresh();
-            refreshCancellation = new CancellationTokenSource();
-            CancellationToken token = refreshCancellation.Token;
-            nextAutoRefreshAt = Time.time + AutoRefreshSeconds;
+            if (quoteRefreshInFlight || candleRefreshInFlight)
+            {
+                if (manual)
+                {
+                    SetStatus("Live refresh is already running.");
+                }
+
+                return;
+            }
+
+            CancellationToken token = GetMarketDataToken();
+            candleRefreshInFlight = true;
+            quoteRefreshInFlight = true;
+            nextCandleRefreshAt = Time.time + CandleRefreshSeconds;
+            nextQuoteRefreshAt = Time.time + QuoteRefreshSeconds;
 
             try
             {
@@ -248,11 +283,11 @@ namespace TestFXTrade.Fx.UI
                 string symbol = FxConstants.UsdJpySymbol;
                 SetStatus($"Fetching live {symbol} quote and candles...");
 
-                IFxMarketDataProvider provider = new TwelveDataMarketDataProvider(apiKey);
-                string interval = intervalDropdown.options[intervalDropdown.value].text;
+                IFxMarketDataProvider provider = GetMarketDataProvider();
+                string interval = GetSelectedInterval();
 
                 Task<MarketQuote> quoteTask = provider.GetLatestQuoteAsync(symbol, token);
-                Task<IReadOnlyList<Candle>> candlesTask = provider.GetCandlesAsync(symbol, interval, 160, token);
+                Task<IReadOnlyList<Candle>> candlesTask = provider.GetCandlesAsync(symbol, interval, CandleOutputSize, token);
                 await Task.WhenAll(quoteTask, candlesTask);
 
                 if (token.IsCancellationRequested)
@@ -260,18 +295,9 @@ namespace TestFXTrade.Fx.UI
                     return;
                 }
 
-                MarketQuote quote = quoteTask.Result;
-                IReadOnlyList<Candle> candles = candlesTask.Result;
-                TradeRecommendation recommendation = recommendationEngine.Build(
-                    ReadAccount(),
-                    ReadPosition(),
-                    ReadRiskProfile(),
-                    quote,
-                    candles);
-
-                chartGraphic.SetCandles(candles);
-                RenderRecommendation(quote, candles, recommendation, interval);
-                SetStatus($"Updated from {provider.ProviderName} at {DateTime.Now:HH:mm:ss}.");
+                latestQuote = quoteTask.Result;
+                ReplaceLatestCandles(candlesTask.Result);
+                RenderLatestMarketState(interval, $"Updated from {provider.ProviderName} at {DateTime.Now:HH:mm:ss}.");
             }
             catch (OperationCanceledException)
             {
@@ -283,6 +309,134 @@ namespace TestFXTrade.Fx.UI
                 recommendationText.text = "Hold: no recommendation while live data is unavailable.";
                 warningsText.text = ex.Message;
             }
+            finally
+            {
+                candleRefreshInFlight = false;
+                quoteRefreshInFlight = false;
+            }
+        }
+
+        private async Task RefreshLatestQuoteAsync(bool manual)
+        {
+            if (quoteRefreshInFlight || candleRefreshInFlight)
+            {
+                if (manual)
+                {
+                    SetStatus("Live quote refresh is already running.");
+                }
+
+                return;
+            }
+
+            CancellationToken token = GetMarketDataToken();
+            quoteRefreshInFlight = true;
+            nextQuoteRefreshAt = Time.time + QuoteRefreshSeconds;
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(apiKey))
+                {
+                    SetStatus("Missing local API key.");
+                    warningsText.text = $"Set {LocalFxSettings.ApiKeyVariableName} in .env before starting the app.";
+                    return;
+                }
+
+                string symbol = FxConstants.UsdJpySymbol;
+                SetStatus($"Updating live {symbol} quote...");
+
+                IFxMarketDataProvider provider = GetMarketDataProvider();
+                latestQuote = await provider.GetLatestQuoteAsync(symbol, token);
+
+                if (token.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                RenderLatestMarketState(GetSelectedInterval(), $"Live quote updated at {DateTime.Now:HH:mm:ss}.");
+            }
+            catch (OperationCanceledException)
+            {
+                SetStatus("Refresh cancelled.");
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Live quote unavailable.");
+                warningsText.text = ex.Message;
+            }
+            finally
+            {
+                quoteRefreshInFlight = false;
+            }
+        }
+
+        private void ReplaceLatestCandles(IReadOnlyList<Candle> candles)
+        {
+            latestCandles.Clear();
+
+            if (candles == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < candles.Count; i++)
+            {
+                Candle candle = candles[i];
+                latestCandles.Add(new Candle(candle.TimeUtc, candle.Open, candle.High, candle.Low, candle.Close));
+            }
+        }
+
+        private void RenderLatestMarketState(string interval, string statusMessage)
+        {
+            if (latestQuote == null)
+            {
+                SetStatus(statusMessage);
+                return;
+            }
+
+            IReadOnlyList<Candle> realtimeCandles = BuildRealtimeCandles();
+            TradeRecommendation recommendation = recommendationEngine.Build(
+                ReadAccount(),
+                ReadPosition(),
+                ReadRiskProfile(),
+                latestQuote,
+                realtimeCandles);
+
+            chartGraphic.SetCandles(realtimeCandles);
+            RenderRecommendation(latestQuote, realtimeCandles, recommendation, interval);
+            SetStatus(statusMessage);
+        }
+
+        private IReadOnlyList<Candle> BuildRealtimeCandles()
+        {
+            List<Candle> candles = new List<Candle>(Math.Max(1, latestCandles.Count));
+
+            for (int i = 0; i < latestCandles.Count; i++)
+            {
+                Candle candle = latestCandles[i];
+                candles.Add(new Candle(candle.TimeUtc, candle.Open, candle.High, candle.Low, candle.Close));
+            }
+
+            if (latestQuote == null || latestQuote.Price <= 0d)
+            {
+                return candles;
+            }
+
+            if (candles.Count == 0)
+            {
+                candles.Add(new Candle(latestQuote.TimeUtc, latestQuote.Price, latestQuote.Price, latestQuote.Price, latestQuote.Price));
+                return candles;
+            }
+
+            int lastIndex = candles.Count - 1;
+            Candle latest = candles[lastIndex];
+            double high = Math.Max(latest.High, latestQuote.Price);
+            double low = Math.Min(latest.Low, latestQuote.Price);
+            DateTime timeUtc = latestQuote.IsTimestampReliable && latestQuote.TimeUtc > latest.TimeUtc
+                ? latestQuote.TimeUtc
+                : latest.TimeUtc;
+
+            candles[lastIndex] = new Candle(timeUtc, latest.Open, high, low, latestQuote.Price);
+            return candles;
         }
 
         private AccountSnapshot ReadAccount()
@@ -365,16 +519,47 @@ namespace TestFXTrade.Fx.UI
             }
         }
 
-        private void CancelRefresh()
+        private CancellationToken GetMarketDataToken()
         {
-            if (refreshCancellation == null)
+            if (marketDataCancellation == null || marketDataCancellation.IsCancellationRequested)
+            {
+                marketDataCancellation = new CancellationTokenSource();
+            }
+
+            return marketDataCancellation.Token;
+        }
+
+        private IFxMarketDataProvider GetMarketDataProvider()
+        {
+            if (marketDataProvider == null)
+            {
+                marketDataProvider = new TwelveDataMarketDataProvider(apiKey);
+            }
+
+            return marketDataProvider;
+        }
+
+        private string GetSelectedInterval()
+        {
+            if (intervalDropdown == null || intervalDropdown.options == null || intervalDropdown.options.Count == 0)
+            {
+                return "5min";
+            }
+
+            int index = Mathf.Clamp(intervalDropdown.value, 0, intervalDropdown.options.Count - 1);
+            return intervalDropdown.options[index].text;
+        }
+
+        private void CancelMarketDataRequests()
+        {
+            if (marketDataCancellation == null)
             {
                 return;
             }
 
-            refreshCancellation.Cancel();
-            refreshCancellation.Dispose();
-            refreshCancellation = null;
+            marketDataCancellation.Cancel();
+            marketDataCancellation.Dispose();
+            marketDataCancellation = null;
         }
 
         private double ParseInput(InputField input, double fallback)
