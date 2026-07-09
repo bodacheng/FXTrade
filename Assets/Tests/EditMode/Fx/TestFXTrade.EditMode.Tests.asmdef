@@ -1,0 +1,21 @@
+{
+    "name": "TestFXTrade.EditMode.Tests",
+    "rootNamespace": "",
+    "references": [
+        "TestFXTrade.Fx"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

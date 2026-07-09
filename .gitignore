@@ -1,0 +1,35 @@
+# macOS
+.DS_Store
+
+# Unity generated folders
+Library/
+Temp/
+Obj/
+Build/
+Builds/
+Logs/
+MemoryCaptures/
+Recordings/
+
+# Unity generated project files
+*.csproj
+*.sln
+*.slnx
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+
+# IDE/editor local state
+.vscode/
+.idea/
+
+# Crash and build artifacts
+*.apk
+*.aab
+*.unitypackage
+*.app
+
+# Local-only Unity user settings
+UserSettings/
