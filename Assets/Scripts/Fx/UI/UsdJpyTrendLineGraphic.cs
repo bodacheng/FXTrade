@@ -6,6 +6,7 @@ using UnityEngine.UI;
 
 namespace TestFXTrade.Fx.UI
 {
+    [RequireComponent(typeof(CanvasRenderer))]
     public sealed class UsdJpyTrendLineGraphic : MaskableGraphic
     {
         private readonly List<Candle> candles = new List<Candle>();

@@ -33,3 +33,8 @@ Recordings/
 
 # Local-only Unity user settings
 UserSettings/
+
+# Local secrets
+.env
+.env.*
+!.env.example

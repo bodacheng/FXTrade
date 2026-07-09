@@ -94,7 +94,7 @@ namespace TestFXTrade.Fx.MarketData
         {
             if (string.IsNullOrWhiteSpace(apiKey))
             {
-                throw new InvalidOperationException("Enter a Twelve Data API key before requesting live USD/JPY data.");
+                throw new InvalidOperationException("Set TWELVE_DATA_API_KEY in local .env before starting the app.");
             }
         }
 

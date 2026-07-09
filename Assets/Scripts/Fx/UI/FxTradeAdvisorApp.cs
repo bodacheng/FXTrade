@@ -16,11 +16,9 @@ namespace TestFXTrade.Fx.UI
     [DefaultExecutionOrder(-500)]
     public sealed class FxTradeAdvisorApp : MonoBehaviour
     {
-        private const string ApiKeyPrefsKey = "TestFXTrade.TwelveDataApiKey";
         private const float AutoRefreshSeconds = 60f;
 
         private Font font;
-        private InputField apiKeyInput;
         private InputField principalInput;
         private InputField equityInput;
         private Dropdown currencyDropdown;
@@ -35,6 +33,7 @@ namespace TestFXTrade.Fx.UI
         private InputField averageShortEntryInput;
         private Dropdown intervalDropdown;
         private Toggle autoRefreshToggle;
+        private Text marketSourceText;
         private Text statusText;
         private Text quoteText;
         private Text metricsText;
@@ -44,6 +43,7 @@ namespace TestFXTrade.Fx.UI
 
         private readonly RecommendationEngine recommendationEngine = new RecommendationEngine();
         private CancellationTokenSource refreshCancellation;
+        private string apiKey = string.Empty;
         private float nextAutoRefreshAt;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -71,20 +71,27 @@ namespace TestFXTrade.Fx.UI
 
         private void Start()
         {
-            string savedApiKey = PlayerPrefs.GetString(ApiKeyPrefsKey, string.Empty);
-            if (string.IsNullOrWhiteSpace(savedApiKey))
+            LocalFxSettings settings = LocalFxSettings.Load();
+            apiKey = settings.ApiKey;
+
+            if (settings.HasApiKey)
             {
-                savedApiKey = Environment.GetEnvironmentVariable("TWELVE_DATA_API_KEY") ?? string.Empty;
+                marketSourceText.text = $"Market data: Twelve Data ({settings.SourceLabel})";
+                SetStatus("Local API key loaded. Refreshing live USD/JPY data.");
+                nextAutoRefreshAt = Time.time + AutoRefreshSeconds;
+                _ = RefreshAsync();
+                return;
             }
 
-            apiKeyInput.text = savedApiKey;
-            SetStatus("Enter a Twelve Data API key, then refresh live USD/JPY data.");
-            nextAutoRefreshAt = Time.time + 5f;
+            marketSourceText.text = $"Market data: missing {LocalFxSettings.ApiKeyVariableName}";
+            SetStatus("Add TWELVE_DATA_API_KEY to .env before starting the app.");
+            warningsText.text = "Create .env from .env.example in the project root, then restart.";
+            nextAutoRefreshAt = float.PositiveInfinity;
         }
 
         private void Update()
         {
-            if (!autoRefreshToggle.isOn || Time.time < nextAutoRefreshAt)
+            if (string.IsNullOrWhiteSpace(apiKey) || !autoRefreshToggle.isOn || Time.time < nextAutoRefreshAt)
             {
                 return;
             }
@@ -148,11 +155,19 @@ namespace TestFXTrade.Fx.UI
         private void BuildInputColumn(Transform parent)
         {
             AddHeader(parent, "USD/JPY Advisor");
-            AddSmallText(parent, "Live market source: Twelve Data. This tool only recommends position size; it never places orders.");
+            marketSourceText = AddSmallText(parent, "Market data: loading local config.");
 
-            apiKeyInput = AddInput(parent, "Twelve Data API Key", string.Empty, true);
-            Button saveButton = AddButton(parent, "Save API Key");
-            saveButton.onClick.AddListener(SaveApiKey);
+            AddDivider(parent);
+            AddSectionTitle(parent, "Market");
+            AddValueRow(parent, "Currency Pair", FxConstants.UsdJpySymbol);
+            intervalDropdown = AddDropdown(parent, "Candle Interval", new List<string> { "1min", "5min", "15min" }, 1);
+            autoRefreshToggle = AddToggle(parent, "Auto Refresh 60s", true);
+
+            Button refreshButton = AddButton(parent, "Refresh Live Chart");
+            refreshButton.onClick.AddListener(() => _ = RefreshAsync());
+
+            statusText = AddSmallText(parent, string.Empty);
+            statusText.color = new Color32(190, 198, 210, 255);
 
             AddDivider(parent);
             AddSectionTitle(parent, "Account");
@@ -174,16 +189,6 @@ namespace TestFXTrade.Fx.UI
             shortLotsInput = AddInput(parent, "Current Short Lots", "0");
             averageLongEntryInput = AddInput(parent, "Avg Long Entry", "0");
             averageShortEntryInput = AddInput(parent, "Avg Short Entry", "0");
-
-            AddDivider(parent);
-            intervalDropdown = AddDropdown(parent, "Candle Interval", new List<string> { "1min", "5min", "15min" }, 1);
-            autoRefreshToggle = AddToggle(parent, "Auto Refresh 60s", true);
-
-            Button refreshButton = AddButton(parent, "Refresh Live Recommendation");
-            refreshButton.onClick.AddListener(() => _ = RefreshAsync());
-
-            statusText = AddSmallText(parent, string.Empty);
-            statusText.color = new Color32(190, 198, 210, 255);
         }
 
         private void BuildOutputColumn(Transform parent)
@@ -195,9 +200,11 @@ namespace TestFXTrade.Fx.UI
             chartLayout.minHeight = 260;
             chartLayout.flexibleWidth = 1;
             GameObject chartLine = CreateUiObject("ChartLine", chartPanel.transform);
+            chartLine.AddComponent<CanvasRenderer>();
             Stretch(chartLine.GetComponent<RectTransform>());
             chartGraphic = chartLine.AddComponent<UsdJpyTrendLineGraphic>();
             chartGraphic.color = Color.white;
+            chartGraphic.raycastTarget = false;
 
             metricsText = AddBodyText(parent, "Market metrics will appear here.");
             recommendationText = AddBodyText(parent, "No recommendation yet.");
@@ -216,14 +223,21 @@ namespace TestFXTrade.Fx.UI
 
             try
             {
-                SetStatus("Fetching live USD/JPY quote and candles...");
+                if (string.IsNullOrWhiteSpace(apiKey))
+                {
+                    SetStatus("Missing local API key.");
+                    warningsText.text = $"Set {LocalFxSettings.ApiKeyVariableName} in .env before starting the app.";
+                    return;
+                }
 
-                string apiKey = apiKeyInput.text.Trim();
+                string symbol = FxConstants.UsdJpySymbol;
+                SetStatus($"Fetching live {symbol} quote and candles...");
+
                 IFxMarketDataProvider provider = new TwelveDataMarketDataProvider(apiKey);
                 string interval = intervalDropdown.options[intervalDropdown.value].text;
 
-                Task<MarketQuote> quoteTask = provider.GetLatestQuoteAsync(FxConstants.UsdJpySymbol, token);
-                Task<IReadOnlyList<Candle>> candlesTask = provider.GetCandlesAsync(FxConstants.UsdJpySymbol, interval, 160, token);
+                Task<MarketQuote> quoteTask = provider.GetLatestQuoteAsync(symbol, token);
+                Task<IReadOnlyList<Candle>> candlesTask = provider.GetCandlesAsync(symbol, interval, 160, token);
                 await Task.WhenAll(quoteTask, candlesTask);
 
                 if (token.IsCancellationRequested)
@@ -290,7 +304,7 @@ namespace TestFXTrade.Fx.UI
                 ? $"{quote.TimeUtc:yyyy-MM-dd HH:mm:ss} UTC"
                 : "provider timestamp unavailable";
 
-            quoteText.text = $"USD/JPY {quote.Price:0.000}  |  {freshness}  |  {interval} x {candles.Count}";
+            quoteText.text = $"{quote.Symbol} {quote.Price:0.000}  |  {freshness}  |  {interval} x {candles.Count}";
 
             AccountSnapshot account = ReadAccount();
             string currency = account.Currency == AccountCurrency.Jpy ? "JPY" : "USD";
@@ -330,13 +344,6 @@ namespace TestFXTrade.Fx.UI
 
                 warningsText.text = warnings.ToString();
             }
-        }
-
-        private void SaveApiKey()
-        {
-            PlayerPrefs.SetString(ApiKeyPrefsKey, apiKeyInput.text.Trim());
-            PlayerPrefs.Save();
-            SetStatus("API key saved locally with Unity PlayerPrefs.");
         }
 
         private void CancelRefresh()
@@ -409,6 +416,28 @@ namespace TestFXTrade.Fx.UI
             return label;
         }
 
+        private Text AddValueRow(Transform parent, string label, string value)
+        {
+            GameObject row = CreateUiObject(label + " Row", parent);
+            LayoutElement rowLayout = row.AddComponent<LayoutElement>();
+            rowLayout.minHeight = 34;
+            HorizontalLayoutGroup group = row.AddComponent<HorizontalLayoutGroup>();
+            group.spacing = 8;
+            group.childControlHeight = true;
+            group.childControlWidth = true;
+            group.childForceExpandHeight = true;
+            group.childForceExpandWidth = false;
+
+            Text labelText = AddText(row.transform, label, 14, FontStyle.Normal, new Color32(207, 214, 224, 255));
+            LayoutElement labelLayout = labelText.gameObject.AddComponent<LayoutElement>();
+            labelLayout.preferredWidth = 170;
+
+            Text valueText = AddText(row.transform, value, 15, FontStyle.Bold, new Color32(238, 242, 247, 255));
+            LayoutElement valueLayout = valueText.gameObject.AddComponent<LayoutElement>();
+            valueLayout.flexibleWidth = 1;
+            return valueText;
+        }
+
         private Text AddSectionTitle(Transform parent, string text)
         {
             Text label = AddText(parent, text, 17, FontStyle.Bold, new Color32(123, 217, 171, 255));
@@ -468,12 +497,14 @@ namespace TestFXTrade.Fx.UI
             GameObject inputObject = CreateUiObject(label + " Input", row.transform);
             Image inputBackground = inputObject.AddComponent<Image>();
             inputBackground.color = new Color32(14, 16, 19, 255);
+            Text inputText = CreateInputText(inputObject.transform, defaultValue);
+
             InputField input = inputObject.AddComponent<InputField>();
-            input.text = defaultValue;
-            input.contentType = password ? InputField.ContentType.Password : InputField.ContentType.DecimalNumber;
             input.targetGraphic = inputBackground;
-            input.textComponent = CreateInputText(inputObject.transform, defaultValue, false);
-            input.placeholder = CreateInputText(inputObject.transform, label, true);
+            input.textComponent = inputText;
+            input.placeholder = null;
+            input.contentType = password ? InputField.ContentType.Password : InputField.ContentType.DecimalNumber;
+            input.SetTextWithoutNotify(defaultValue);
 
             LayoutElement inputLayout = inputObject.AddComponent<LayoutElement>();
             inputLayout.flexibleWidth = 1;
@@ -481,9 +512,9 @@ namespace TestFXTrade.Fx.UI
             return input;
         }
 
-        private Text CreateInputText(Transform parent, string value, bool placeholder)
+        private Text CreateInputText(Transform parent, string value)
         {
-            GameObject textObject = CreateUiObject(placeholder ? "Placeholder" : "Input Text", parent);
+            GameObject textObject = CreateUiObject("Input Text", parent);
             RectTransform rect = textObject.GetComponent<RectTransform>();
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
@@ -493,9 +524,10 @@ namespace TestFXTrade.Fx.UI
             Text text = textObject.AddComponent<Text>();
             text.font = font;
             text.fontSize = 15;
-            text.color = placeholder ? new Color32(110, 118, 130, 255) : new Color32(238, 242, 247, 255);
-            text.text = placeholder ? string.Empty : value;
+            text.color = new Color32(238, 242, 247, 255);
+            text.text = value;
             text.alignment = TextAnchor.MiddleLeft;
+            text.raycastTarget = false;
             return text;
         }
 
