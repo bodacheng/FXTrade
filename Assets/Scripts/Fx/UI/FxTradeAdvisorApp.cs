@@ -43,6 +43,10 @@ namespace TestFXTrade.Fx.UI
         private Text recommendationText;
         private Text warningsText;
         private UsdJpyTrendLineGraphic chartGraphic;
+        private CanvasScaler canvasScaler;
+        private RectTransform safeAreaContentRect;
+        private Rect lastSafeArea = new Rect(-1f, -1f, -1f, -1f);
+        private Vector2Int lastScreenSize = new Vector2Int(-1, -1);
 
         private readonly RecommendationEngine recommendationEngine = new RecommendationEngine();
         private readonly List<Candle> latestCandles = new List<Candle>();
@@ -105,6 +109,8 @@ namespace TestFXTrade.Fx.UI
 
         private void Update()
         {
+            RefreshAdaptiveLayout();
+
             if (string.IsNullOrWhiteSpace(apiKey) || !autoRefreshToggle.isOn)
             {
                 return;
@@ -142,99 +148,73 @@ namespace TestFXTrade.Fx.UI
             Image rootBackground = root.AddComponent<Image>();
             rootBackground.color = new Color32(18, 20, 23, 255);
 
-            ScrollRect scrollRect = root.AddComponent<ScrollRect>();
-            scrollRect.horizontal = false;
-            scrollRect.vertical = true;
-            scrollRect.movementType = ScrollRect.MovementType.Clamped;
-            scrollRect.scrollSensitivity = 28f;
-
-            GameObject viewport = CreateUiObject("Viewport", root.transform);
-            RectTransform viewportRect = viewport.GetComponent<RectTransform>();
-            Stretch(viewportRect);
-            ApplySafeArea(viewportRect);
-            Image viewportImage = viewport.AddComponent<Image>();
-            viewportImage.color = new Color32(18, 20, 23, 255);
-            Mask viewportMask = viewport.AddComponent<Mask>();
-            viewportMask.showMaskGraphic = false;
-
-            GameObject content = CreateUiObject("Content", viewport.transform);
-            RectTransform contentRect = content.GetComponent<RectTransform>();
-            contentRect.anchorMin = new Vector2(0f, 1f);
-            contentRect.anchorMax = new Vector2(1f, 1f);
-            contentRect.pivot = new Vector2(0.5f, 1f);
-            contentRect.anchoredPosition = Vector2.zero;
-            contentRect.sizeDelta = Vector2.zero;
+            GameObject content = CreateUiObject("Safe Area Content", root.transform);
+            safeAreaContentRect = content.GetComponent<RectTransform>();
+            Stretch(safeAreaContentRect);
 
             VerticalLayoutGroup contentGroup = content.AddComponent<VerticalLayoutGroup>();
-            contentGroup.padding = new RectOffset(16, 16, 18, 28);
-            contentGroup.spacing = 12;
+            contentGroup.padding = new RectOffset(10, 10, 8, 8);
+            contentGroup.spacing = 4;
             contentGroup.childControlWidth = true;
             contentGroup.childControlHeight = true;
             contentGroup.childForceExpandWidth = true;
             contentGroup.childForceExpandHeight = false;
 
-            ContentSizeFitter contentFitter = content.AddComponent<ContentSizeFitter>();
-            contentFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-            scrollRect.viewport = viewportRect;
-            scrollRect.content = contentRect;
-
             BuildMarketControls(content.transform);
             BuildOutputColumn(content.transform);
             BuildInputColumn(content.transform);
+            RefreshAdaptiveLayout(true);
         }
 
         private void BuildMarketControls(Transform parent)
         {
             AddHeader(parent, "USD/JPY Advisor");
-            marketSourceText = AddSmallText(parent, "Market data: loading local config.");
+            marketSourceText = AddCompactInfoText(parent, "Market data: loading local config.");
 
-            AddDivider(parent);
-            AddSectionTitle(parent, "Market");
-            AddValueRow(parent, "Currency Pair", FxConstants.UsdJpySymbol);
-            intervalDropdown = AddDropdown(parent, "Candle Interval", new List<string> { "1min", "5min", "15min" }, 1);
+            Transform controls = CreateCompactFieldRow(parent, "Market Controls");
+            AddValueRow(controls, "Pair", FxConstants.UsdJpySymbol);
+            intervalDropdown = AddDropdown(controls, "Interval", new List<string> { "1min", "5min", "15min" }, 1);
             intervalDropdown.onValueChanged.AddListener(unused => { _ = RefreshCandlesAndQuoteAsync(true); });
-            autoRefreshToggle = AddToggle(parent, "Live Refresh 5s", true);
+            autoRefreshToggle = AddToggle(controls, "Live 5s", true);
 
-            Button refreshButton = AddButton(parent, "Refresh Live Chart");
+            Button refreshButton = AddButton(controls, "Refresh");
             refreshButton.onClick.AddListener(() => _ = RefreshCandlesAndQuoteAsync(true));
 
-            statusText = AddSmallText(parent, string.Empty);
+            statusText = AddCompactInfoText(parent, string.Empty);
             statusText.color = new Color32(190, 198, 210, 255);
         }
 
         private void BuildInputColumn(Transform parent)
         {
-            AddDivider(parent);
-            AddSectionTitle(parent, "Account");
-            principalInput = AddInput(parent, "Principal", "1000000");
-            equityInput = AddInput(parent, "Equity", "1000000");
-            currencyDropdown = AddDropdown(parent, "Account Currency", new List<string> { "JPY", "USD" }, 0);
-            leverageInput = AddInput(parent, "Leverage", "25");
+            Transform accountFields = CreateCompactSection(parent, "Account");
+            principalInput = AddInput(accountFields, "Principal", "1000000");
+            equityInput = AddInput(accountFields, "Equity", "1000000");
+            currencyDropdown = AddDropdown(accountFields, "Currency", new List<string> { "JPY", "USD" }, 0);
+            leverageInput = AddInput(accountFields, "Leverage", "25");
 
-            AddDivider(parent);
-            AddSectionTitle(parent, "Risk Rules");
-            riskPercentInput = AddInput(parent, "Risk Per Trade %", "1");
-            marginPercentInput = AddInput(parent, "Max Margin Usage %", "30");
-            stopLossPipsInput = AddInput(parent, "Planned Stop Pips", "40");
-            spreadPipsInput = AddInput(parent, "Estimated Spread Pips", "0.2");
+            Transform riskFields = CreateCompactSection(parent, "Risk Rules");
+            riskPercentInput = AddInput(riskFields, "Risk %", "1");
+            marginPercentInput = AddInput(riskFields, "Margin %", "30");
+            stopLossPipsInput = AddInput(riskFields, "Stop Pips", "40");
+            spreadPipsInput = AddInput(riskFields, "Spread", "0.2");
 
-            AddDivider(parent);
-            AddSectionTitle(parent, "Current Position");
-            longLotsInput = AddInput(parent, "Current Long Lots", "0");
-            shortLotsInput = AddInput(parent, "Current Short Lots", "0");
-            averageLongEntryInput = AddInput(parent, "Avg Long Entry", "0");
-            averageShortEntryInput = AddInput(parent, "Avg Short Entry", "0");
+            Transform positionFields = CreateCompactSection(parent, "Current Position");
+            longLotsInput = AddInput(positionFields, "Long Lots", "0");
+            shortLotsInput = AddInput(positionFields, "Short Lots", "0");
+            averageLongEntryInput = AddInput(positionFields, "Long Avg", "0");
+            averageShortEntryInput = AddInput(positionFields, "Short Avg", "0");
         }
 
         private void BuildOutputColumn(Transform parent)
         {
-            quoteText = AddHeader(parent, "Waiting for live USD/JPY");
+            quoteText = AddQuoteText(parent, "Waiting for live USD/JPY");
 
             GameObject chartPanel = CreatePanel("ChartPanel", parent, new Color32(12, 14, 17, 255));
             LayoutElement chartLayout = chartPanel.AddComponent<LayoutElement>();
-            chartLayout.minHeight = 220;
+            chartLayout.minHeight = 94;
+            chartLayout.preferredHeight = 94;
             chartLayout.flexibleWidth = 1;
+            chartLayout.flexibleHeight = 1;
             GameObject chartLine = CreateUiObject("ChartLine", chartPanel.transform);
             chartLine.AddComponent<CanvasRenderer>();
             RectTransform chartLineRect = chartLine.GetComponent<RectTransform>();
@@ -247,9 +227,15 @@ namespace TestFXTrade.Fx.UI
 
             metricsText = AddBodyText(parent, "Market metrics will appear here.");
             recommendationText = AddBodyText(parent, "No recommendation yet.");
-            recommendationText.fontSize = 18;
+            LayoutElement recommendationLayout = recommendationText.GetComponent<LayoutElement>();
+            recommendationLayout.minHeight = 42;
+            recommendationLayout.preferredHeight = 42;
+            recommendationText.fontSize = 12;
             recommendationText.color = new Color32(234, 239, 246, 255);
             warningsText = AddBodyText(parent, string.Empty);
+            LayoutElement warningsLayout = warningsText.GetComponent<LayoutElement>();
+            warningsLayout.minHeight = 28;
+            warningsLayout.preferredHeight = 28;
             warningsText.color = new Color32(244, 192, 102, 255);
         }
 
@@ -479,40 +465,38 @@ namespace TestFXTrade.Fx.UI
             string currency = account.Currency == AccountCurrency.Jpy ? "JPY" : "USD";
 
             StringBuilder metrics = new StringBuilder();
-            metrics.AppendLine($"Trend Score: {recommendation.TrendScore:0.00}");
-            metrics.AppendLine($"Confidence: {recommendation.Confidence:0.00}");
-            metrics.AppendLine($"RSI(14): {recommendation.Rsi:0.0}");
-            metrics.AppendLine($"ATR(14): {recommendation.AtrPips:0.0} pips");
-            metrics.AppendLine($"Pip Value / lot: {recommendation.PipValuePerLotAccountCurrency:0.##} {currency}");
-            metrics.AppendLine($"Margin / lot: {recommendation.MarginPerLotAccountCurrency:0.##} {currency}");
-            metrics.AppendLine($"Current Net: {recommendation.CurrentNetLots:0.00} lots");
-            metrics.AppendLine($"Target Net: {recommendation.TargetNetLots:0.00} lots");
-            metrics.AppendLine($"Max Safe Gross Lots: {recommendation.MaxSafeGrossLots:0.00}");
+            metrics.AppendLine($"Trend {recommendation.TrendScore:0.00}   Confidence {recommendation.Confidence:0.00}   RSI {recommendation.Rsi:0.0}   ATR {recommendation.AtrPips:0.0} pips");
+            metrics.AppendLine($"Pip/lot {recommendation.PipValuePerLotAccountCurrency:0.##} {currency}   Margin/lot {recommendation.MarginPerLotAccountCurrency:0.##} {currency}");
+            metrics.Append($"Net {recommendation.CurrentNetLots:0.00}   Target {recommendation.TargetNetLots:0.00}   Max {recommendation.MaxSafeGrossLots:0.00} lots");
             metricsText.text = metrics.ToString();
 
             StringBuilder advice = new StringBuilder();
             advice.AppendLine(recommendation.Summary);
-            advice.AppendLine($"Buy: {recommendation.SuggestedBuyLots:0.00} lots");
-            advice.AppendLine($"Sell: {recommendation.SuggestedSellLots:0.00} lots");
-            advice.AppendLine($"Estimated margin for suggestion: {recommendation.RequiredMarginForSuggestion:0.##} {currency}");
+            advice.Append($"Buy {recommendation.SuggestedBuyLots:0.00}   Sell {recommendation.SuggestedSellLots:0.00}   Margin {recommendation.RequiredMarginForSuggestion:0.##} {currency}");
 
-            for (int i = 0; i < recommendation.Reasons.Count; i++)
+            if (recommendation.Reasons.Count > 0)
             {
-                advice.AppendLine("- " + recommendation.Reasons[i]);
+                advice.AppendLine();
+                advice.Append(recommendation.Reasons[0]);
             }
 
             recommendationText.text = advice.ToString();
 
             if (recommendation.Warnings.Count == 0)
             {
-                warningsText.text = "Risk notes: no blocking warning from the current inputs.";
+                warningsText.text = "Risk: no blocking warning from the current inputs.";
             }
             else
             {
-                StringBuilder warnings = new StringBuilder("Risk notes:\n");
+                StringBuilder warnings = new StringBuilder("Risk: ");
                 for (int i = 0; i < recommendation.Warnings.Count; i++)
                 {
-                    warnings.AppendLine("- " + recommendation.Warnings[i]);
+                    if (i > 0)
+                    {
+                        warnings.Append(" | ");
+                    }
+
+                    warnings.Append(recommendation.Warnings[i]);
                 }
 
                 warningsText.text = warnings.ToString();
@@ -589,20 +573,46 @@ namespace TestFXTrade.Fx.UI
             Screen.orientation = ScreenOrientation.Portrait;
         }
 
-        private static void ApplySafeArea(RectTransform rect)
+        private void RefreshAdaptiveLayout(bool force = false)
         {
-            if (Screen.width <= 0 || Screen.height <= 0)
+            if (canvasScaler == null || safeAreaContentRect == null || Screen.width <= 0 || Screen.height <= 0)
             {
                 return;
             }
 
             Rect safeArea = Screen.safeArea;
+            Vector2Int screenSize = new Vector2Int(Screen.width, Screen.height);
+            if (safeArea.width <= 0f || safeArea.height <= 0f)
+            {
+                safeArea = new Rect(0f, 0f, screenSize.x, screenSize.y);
+            }
+
+            if (!force && safeArea == lastSafeArea && screenSize == lastScreenSize)
+            {
+                return;
+            }
+
+            lastSafeArea = safeArea;
+            lastScreenSize = screenSize;
+            ApplySafeArea(safeAreaContentRect, safeArea, screenSize);
+
+            float safeWidthRatio = Mathf.Clamp(safeArea.width / screenSize.x, 0.01f, 1f);
+            float safeHeightRatio = Mathf.Clamp(safeArea.height / screenSize.y, 0.01f, 1f);
+            canvasScaler.referenceResolution = new Vector2(
+                MobileReferenceResolution.x / safeWidthRatio,
+                MobileReferenceResolution.y / safeHeightRatio);
+
+            LayoutRebuilder.ForceRebuildLayoutImmediate(safeAreaContentRect);
+        }
+
+        private static void ApplySafeArea(RectTransform rect, Rect safeArea, Vector2Int screenSize)
+        {
             Vector2 anchorMin = safeArea.position;
             Vector2 anchorMax = safeArea.position + safeArea.size;
-            anchorMin.x /= Screen.width;
-            anchorMin.y /= Screen.height;
-            anchorMax.x /= Screen.width;
-            anchorMax.y /= Screen.height;
+            anchorMin.x /= screenSize.x;
+            anchorMin.y /= screenSize.y;
+            anchorMax.x /= screenSize.x;
+            anchorMax.y /= screenSize.y;
 
             rect.anchorMin = anchorMin;
             rect.anchorMax = anchorMax;
@@ -618,11 +628,10 @@ namespace TestFXTrade.Fx.UI
             canvas.sortingOrder = 100;
             canvasObject.AddComponent<GraphicRaycaster>();
 
-            CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-            scaler.referenceResolution = MobileReferenceResolution;
-            scaler.matchWidthOrHeight = 0f;
+            canvasScaler = canvasObject.AddComponent<CanvasScaler>();
+            canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            canvasScaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+            canvasScaler.referenceResolution = MobileReferenceResolution;
             return canvas;
         }
 
@@ -645,59 +654,142 @@ namespace TestFXTrade.Fx.UI
 
         private Text AddHeader(Transform parent, string text)
         {
-            Text label = AddText(parent, text, 24, FontStyle.Bold, new Color32(244, 247, 251, 255));
+            Text label = AddText(parent, text, 22, FontStyle.Bold, new Color32(244, 247, 251, 255));
             LayoutElement layout = label.gameObject.AddComponent<LayoutElement>();
-            layout.minHeight = 38;
+            layout.minHeight = 28;
+            layout.preferredHeight = 28;
+            return label;
+        }
+
+        private Text AddQuoteText(Transform parent, string text)
+        {
+            Text label = AddText(parent, text, 15, FontStyle.Bold, new Color32(244, 247, 251, 255));
+            label.alignment = TextAnchor.UpperLeft;
+            label.verticalOverflow = VerticalWrapMode.Truncate;
+            label.resizeTextForBestFit = true;
+            label.resizeTextMinSize = 10;
+            label.resizeTextMaxSize = 15;
+            LayoutElement layout = label.gameObject.AddComponent<LayoutElement>();
+            layout.minHeight = 30;
+            layout.preferredHeight = 30;
             return label;
         }
 
         private Text AddValueRow(Transform parent, string label, string value)
         {
-            GameObject row = CreateUiObject(label + " Row", parent);
-            LayoutElement rowLayout = row.AddComponent<LayoutElement>();
-            rowLayout.minHeight = 42;
-            HorizontalLayoutGroup group = row.AddComponent<HorizontalLayoutGroup>();
-            group.spacing = 10;
-            group.padding = new RectOffset(0, 0, 4, 4);
-            group.childControlHeight = true;
-            group.childControlWidth = true;
-            group.childForceExpandHeight = false;
-            group.childForceExpandWidth = false;
+            GameObject field = CreateCompactField(parent, label);
+            AddCompactFieldLabel(field.transform, label);
 
-            Text labelText = AddText(row.transform, label, 13, FontStyle.Normal, new Color32(207, 214, 224, 255));
-            LayoutElement labelLayout = labelText.gameObject.AddComponent<LayoutElement>();
-            labelLayout.preferredWidth = 136;
-
-            Text valueText = AddText(row.transform, value, 15, FontStyle.Bold, new Color32(238, 242, 247, 255));
-            LayoutElement valueLayout = valueText.gameObject.AddComponent<LayoutElement>();
-            valueLayout.flexibleWidth = 1;
+            GameObject valueObject = CreateUiObject(label + " Value", field.transform);
+            Image valueBackground = valueObject.AddComponent<Image>();
+            valueBackground.color = new Color32(14, 16, 19, 255);
+            Text valueText = AddText(valueObject.transform, value, 12, FontStyle.Bold, new Color32(238, 242, 247, 255));
+            valueText.alignment = TextAnchor.MiddleCenter;
+            Stretch(valueText.GetComponent<RectTransform>());
+            LayoutElement valueLayout = valueObject.AddComponent<LayoutElement>();
+            valueLayout.minHeight = 32;
+            valueLayout.preferredHeight = 32;
             return valueText;
         }
 
         private Text AddSectionTitle(Transform parent, string text)
         {
-            Text label = AddText(parent, text, 17, FontStyle.Bold, new Color32(123, 217, 171, 255));
+            Text label = AddText(parent, text, 13, FontStyle.Bold, new Color32(123, 217, 171, 255));
             LayoutElement layout = label.gameObject.AddComponent<LayoutElement>();
-            layout.minHeight = 26;
+            layout.minHeight = 16;
+            layout.preferredHeight = 16;
             return label;
         }
 
-        private Text AddSmallText(Transform parent, string text)
+        private Text AddCompactInfoText(Transform parent, string text)
         {
-            Text label = AddText(parent, text, 13, FontStyle.Normal, new Color32(170, 178, 190, 255));
+            Text label = AddText(parent, text, 11, FontStyle.Normal, new Color32(170, 178, 190, 255));
+            label.verticalOverflow = VerticalWrapMode.Truncate;
+            label.resizeTextForBestFit = true;
+            label.resizeTextMinSize = 8;
+            label.resizeTextMaxSize = 11;
             LayoutElement layout = label.gameObject.AddComponent<LayoutElement>();
-            layout.minHeight = 30;
+            layout.minHeight = 15;
+            layout.preferredHeight = 15;
             return label;
         }
 
         private Text AddBodyText(Transform parent, string text)
         {
-            Text label = AddText(parent, text, 16, FontStyle.Normal, new Color32(211, 218, 228, 255));
+            Text label = AddText(parent, text, 12, FontStyle.Normal, new Color32(211, 218, 228, 255));
             label.alignment = TextAnchor.UpperLeft;
+            label.verticalOverflow = VerticalWrapMode.Truncate;
+            label.resizeTextForBestFit = true;
+            label.resizeTextMinSize = 8;
+            label.resizeTextMaxSize = 12;
             LayoutElement layout = label.gameObject.AddComponent<LayoutElement>();
-            layout.minHeight = 82;
+            layout.minHeight = 34;
+            layout.preferredHeight = 34;
             layout.flexibleWidth = 1;
             return label;
+        }
+
+        private Transform CreateCompactSection(Transform parent, string title)
+        {
+            GameObject section = CreateUiObject(title + " Section", parent);
+            LayoutElement sectionLayout = section.AddComponent<LayoutElement>();
+            sectionLayout.minHeight = 63;
+            sectionLayout.preferredHeight = 63;
+
+            VerticalLayoutGroup sectionGroup = section.AddComponent<VerticalLayoutGroup>();
+            sectionGroup.spacing = 2;
+            sectionGroup.childControlHeight = true;
+            sectionGroup.childControlWidth = true;
+            sectionGroup.childForceExpandHeight = false;
+            sectionGroup.childForceExpandWidth = true;
+
+            AddSectionTitle(section.transform, title);
+            return CreateCompactFieldRow(section.transform, title + " Fields");
+        }
+
+        private Transform CreateCompactFieldRow(Transform parent, string name)
+        {
+            GameObject row = CreateUiObject(name, parent);
+            LayoutElement rowLayout = row.AddComponent<LayoutElement>();
+            rowLayout.minHeight = 45;
+            rowLayout.preferredHeight = 45;
+
+            HorizontalLayoutGroup group = row.AddComponent<HorizontalLayoutGroup>();
+            group.spacing = 4;
+            group.childControlHeight = true;
+            group.childControlWidth = true;
+            group.childForceExpandHeight = true;
+            group.childForceExpandWidth = true;
+            return row.transform;
+        }
+
+        private GameObject CreateCompactField(Transform parent, string label)
+        {
+            GameObject field = CreateUiObject(label + " Field", parent);
+            LayoutElement fieldLayout = field.AddComponent<LayoutElement>();
+            fieldLayout.flexibleWidth = 1;
+            fieldLayout.minWidth = 0;
+
+            VerticalLayoutGroup group = field.AddComponent<VerticalLayoutGroup>();
+            group.spacing = 1;
+            group.childControlHeight = true;
+            group.childControlWidth = true;
+            group.childForceExpandHeight = false;
+            group.childForceExpandWidth = true;
+            return field;
+        }
+
+        private Text AddCompactFieldLabel(Transform parent, string label)
+        {
+            Text labelText = AddText(parent, label, 10, FontStyle.Normal, new Color32(207, 214, 224, 255));
+            labelText.verticalOverflow = VerticalWrapMode.Truncate;
+            labelText.resizeTextForBestFit = true;
+            labelText.resizeTextMinSize = 8;
+            labelText.resizeTextMaxSize = 10;
+            LayoutElement labelLayout = labelText.gameObject.AddComponent<LayoutElement>();
+            labelLayout.minHeight = 12;
+            labelLayout.preferredHeight = 12;
+            return labelText;
         }
 
         private Text AddText(Transform parent, string value, int size, FontStyle style, Color32 color)
@@ -718,21 +810,10 @@ namespace TestFXTrade.Fx.UI
 
         private InputField AddInput(Transform parent, string label, string defaultValue, bool password = false)
         {
-            GameObject row = CreateUiObject(label + " Row", parent);
-            LayoutElement rowLayout = row.AddComponent<LayoutElement>();
-            rowLayout.minHeight = 74;
-            VerticalLayoutGroup group = row.AddComponent<VerticalLayoutGroup>();
-            group.spacing = 6;
-            group.childControlHeight = true;
-            group.childControlWidth = true;
-            group.childForceExpandHeight = false;
-            group.childForceExpandWidth = true;
+            GameObject field = CreateCompactField(parent, label);
+            AddCompactFieldLabel(field.transform, label);
 
-            Text labelText = AddText(row.transform, label, 13, FontStyle.Normal, new Color32(207, 214, 224, 255));
-            LayoutElement labelLayout = labelText.gameObject.AddComponent<LayoutElement>();
-            labelLayout.minHeight = 18;
-
-            GameObject inputObject = CreateUiObject(label + " Input", row.transform);
+            GameObject inputObject = CreateUiObject(label + " Input", field.transform);
             Image inputBackground = inputObject.AddComponent<Image>();
             inputBackground.color = new Color32(14, 16, 19, 255);
             Text inputText = CreateInputText(inputObject.transform, defaultValue);
@@ -747,8 +828,8 @@ namespace TestFXTrade.Fx.UI
 
             LayoutElement inputLayout = inputObject.AddComponent<LayoutElement>();
             inputLayout.flexibleWidth = 1;
-            inputLayout.minHeight = 44;
-            inputLayout.preferredHeight = 44;
+            inputLayout.minHeight = 32;
+            inputLayout.preferredHeight = 32;
             return input;
         }
 
@@ -758,12 +839,12 @@ namespace TestFXTrade.Fx.UI
             RectTransform rect = textObject.GetComponent<RectTransform>();
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
-            rect.offsetMin = new Vector2(10, 5);
-            rect.offsetMax = new Vector2(-10, -5);
+            rect.offsetMin = new Vector2(6, 2);
+            rect.offsetMax = new Vector2(-6, -2);
 
             Text text = textObject.AddComponent<Text>();
             text.font = font;
-            text.fontSize = 16;
+            text.fontSize = 12;
             text.color = new Color32(238, 242, 247, 255);
             text.text = value;
             text.alignment = TextAnchor.MiddleLeft;
@@ -773,39 +854,28 @@ namespace TestFXTrade.Fx.UI
 
         private Dropdown AddDropdown(Transform parent, string label, List<string> options, int value)
         {
-            GameObject row = CreateUiObject(label + " Row", parent);
-            LayoutElement rowLayout = row.AddComponent<LayoutElement>();
-            rowLayout.minHeight = 74;
-            VerticalLayoutGroup group = row.AddComponent<VerticalLayoutGroup>();
-            group.spacing = 6;
-            group.childControlHeight = true;
-            group.childControlWidth = true;
-            group.childForceExpandHeight = false;
-            group.childForceExpandWidth = true;
+            GameObject field = CreateCompactField(parent, label);
+            AddCompactFieldLabel(field.transform, label);
 
-            Text labelText = AddText(row.transform, label, 13, FontStyle.Normal, new Color32(207, 214, 224, 255));
-            LayoutElement labelLayout = labelText.gameObject.AddComponent<LayoutElement>();
-            labelLayout.minHeight = 18;
-
-            GameObject dropdownObject = CreateUiObject(label + " Dropdown", row.transform);
+            GameObject dropdownObject = CreateUiObject(label + " Dropdown", field.transform);
             Image background = dropdownObject.AddComponent<Image>();
             background.color = new Color32(14, 16, 19, 255);
             Dropdown dropdown = dropdownObject.AddComponent<Dropdown>();
             dropdown.targetGraphic = background;
             dropdown.options = options.ConvertAll(option => new Dropdown.OptionData(option));
             dropdown.value = value;
-            dropdown.captionText = AddText(dropdownObject.transform, options[value], 15, FontStyle.Normal, new Color32(238, 242, 247, 255));
+            dropdown.captionText = AddText(dropdownObject.transform, options[value], 12, FontStyle.Normal, new Color32(238, 242, 247, 255));
             RectTransform captionRect = dropdown.captionText.GetComponent<RectTransform>();
             captionRect.anchorMin = Vector2.zero;
             captionRect.anchorMax = Vector2.one;
-            captionRect.offsetMin = new Vector2(10, 5);
-            captionRect.offsetMax = new Vector2(-10, -5);
+            captionRect.offsetMin = new Vector2(6, 2);
+            captionRect.offsetMax = new Vector2(-6, -2);
             CreateDropdownTemplate(dropdown, dropdownObject.transform);
 
             LayoutElement dropdownLayout = dropdownObject.AddComponent<LayoutElement>();
             dropdownLayout.flexibleWidth = 1;
-            dropdownLayout.minHeight = 44;
-            dropdownLayout.preferredHeight = 44;
+            dropdownLayout.minHeight = 32;
+            dropdownLayout.preferredHeight = 32;
             return dropdown;
         }
 
@@ -818,7 +888,7 @@ namespace TestFXTrade.Fx.UI
             templateRect.anchorMax = new Vector2(1f, 0f);
             templateRect.pivot = new Vector2(0.5f, 1f);
             templateRect.anchoredPosition = new Vector2(0f, -2f);
-            templateRect.sizeDelta = new Vector2(0f, 156f);
+            templateRect.sizeDelta = new Vector2(0f, 108f);
             Image templateImage = template.AddComponent<Image>();
             templateImage.color = new Color32(18, 21, 25, 255);
             ScrollRect scrollRect = template.AddComponent<ScrollRect>();
@@ -839,7 +909,7 @@ namespace TestFXTrade.Fx.UI
             contentRect.anchorMax = new Vector2(1f, 1f);
             contentRect.pivot = new Vector2(0.5f, 1f);
             contentRect.anchoredPosition = Vector2.zero;
-            contentRect.sizeDelta = new Vector2(0f, 132f);
+            contentRect.sizeDelta = new Vector2(0f, 96f);
             VerticalLayoutGroup contentLayout = content.AddComponent<VerticalLayoutGroup>();
             contentLayout.childControlHeight = true;
             contentLayout.childControlWidth = true;
@@ -850,21 +920,21 @@ namespace TestFXTrade.Fx.UI
 
             GameObject item = CreateUiObject("Item", content.transform);
             RectTransform itemRect = item.GetComponent<RectTransform>();
-            itemRect.sizeDelta = new Vector2(0f, 40f);
+            itemRect.sizeDelta = new Vector2(0f, 32f);
             LayoutElement itemLayout = item.AddComponent<LayoutElement>();
-            itemLayout.minHeight = 40f;
-            itemLayout.preferredHeight = 40f;
+            itemLayout.minHeight = 32f;
+            itemLayout.preferredHeight = 32f;
             Image itemBackground = item.AddComponent<Image>();
             itemBackground.color = new Color32(24, 28, 32, 255);
             Toggle itemToggle = item.AddComponent<Toggle>();
             itemToggle.targetGraphic = itemBackground;
 
-            Text itemText = AddText(item.transform, "Option", 14, FontStyle.Normal, new Color32(238, 242, 247, 255));
+            Text itemText = AddText(item.transform, "Option", 12, FontStyle.Normal, new Color32(238, 242, 247, 255));
             RectTransform itemTextRect = itemText.GetComponent<RectTransform>();
             itemTextRect.anchorMin = Vector2.zero;
             itemTextRect.anchorMax = Vector2.one;
-            itemTextRect.offsetMin = new Vector2(10f, 0f);
-            itemTextRect.offsetMax = new Vector2(-10f, 0f);
+            itemTextRect.offsetMin = new Vector2(6f, 0f);
+            itemTextRect.offsetMax = new Vector2(-6f, 0f);
 
             scrollRect.viewport = viewportRect;
             scrollRect.content = contentRect;
@@ -874,71 +944,51 @@ namespace TestFXTrade.Fx.UI
 
         private Toggle AddToggle(Transform parent, string label, bool defaultValue)
         {
-            GameObject row = CreateUiObject(label + " Row", parent);
-            LayoutElement rowLayout = row.AddComponent<LayoutElement>();
-            rowLayout.minHeight = 44;
-            HorizontalLayoutGroup group = row.AddComponent<HorizontalLayoutGroup>();
-            group.spacing = 10;
-            group.padding = new RectOffset(0, 0, 7, 7);
-            group.childControlHeight = true;
-            group.childControlWidth = true;
-            group.childForceExpandHeight = false;
-            group.childForceExpandWidth = false;
+            GameObject field = CreateCompactField(parent, label);
+            AddCompactFieldLabel(field.transform, label);
 
-            GameObject box = CreateUiObject("Toggle Box", row.transform);
+            GameObject box = CreateUiObject("Toggle Box", field.transform);
             Image boxImage = box.AddComponent<Image>();
             boxImage.color = new Color32(14, 16, 19, 255);
             LayoutElement boxLayout = box.AddComponent<LayoutElement>();
-            boxLayout.preferredWidth = 30;
-            boxLayout.preferredHeight = 30;
+            boxLayout.minHeight = 32;
+            boxLayout.preferredHeight = 32;
 
             GameObject checkmark = CreateUiObject("Checkmark", box.transform);
             Image checkmarkImage = checkmark.AddComponent<Image>();
             checkmarkImage.color = new Color32(123, 217, 171, 255);
             RectTransform checkmarkRect = checkmark.GetComponent<RectTransform>();
-            checkmarkRect.anchorMin = new Vector2(0.25f, 0.25f);
-            checkmarkRect.anchorMax = new Vector2(0.75f, 0.75f);
+            checkmarkRect.anchorMin = new Vector2(0.35f, 0.25f);
+            checkmarkRect.anchorMax = new Vector2(0.65f, 0.75f);
             checkmarkRect.offsetMin = Vector2.zero;
             checkmarkRect.offsetMax = Vector2.zero;
 
-            Toggle toggle = row.AddComponent<Toggle>();
+            Toggle toggle = field.AddComponent<Toggle>();
             toggle.targetGraphic = boxImage;
             toggle.graphic = checkmarkImage;
             toggle.isOn = defaultValue;
-
-            Text text = AddText(row.transform, label, 14, FontStyle.Normal, new Color32(207, 214, 224, 255));
-            LayoutElement textLayout = text.gameObject.AddComponent<LayoutElement>();
-            textLayout.flexibleWidth = 1;
-            textLayout.minHeight = 30;
             return toggle;
         }
 
         private Button AddButton(Transform parent, string label)
         {
-            GameObject buttonObject = CreateUiObject(label + " Button", parent);
+            GameObject field = CreateCompactField(parent, label);
+            AddCompactFieldLabel(field.transform, label);
+
+            GameObject buttonObject = CreateUiObject(label + " Button", field.transform);
             Image background = buttonObject.AddComponent<Image>();
             background.color = new Color32(55, 132, 93, 255);
             Button button = buttonObject.AddComponent<Button>();
             button.targetGraphic = background;
-            Text text = AddText(buttonObject.transform, label, 15, FontStyle.Bold, Color.white);
+            Text text = AddText(buttonObject.transform, "Run", 11, FontStyle.Bold, Color.white);
             text.alignment = TextAnchor.MiddleCenter;
             RectTransform textRect = text.GetComponent<RectTransform>();
             Stretch(textRect);
 
             LayoutElement layout = buttonObject.AddComponent<LayoutElement>();
-            layout.minHeight = 48;
-            layout.preferredHeight = 48;
+            layout.minHeight = 32;
+            layout.preferredHeight = 32;
             return button;
-        }
-
-        private void AddDivider(Transform parent)
-        {
-            GameObject divider = CreateUiObject("Divider", parent);
-            Image image = divider.AddComponent<Image>();
-            image.color = new Color32(255, 255, 255, 28);
-            LayoutElement layout = divider.AddComponent<LayoutElement>();
-            layout.minHeight = 1;
-            layout.preferredHeight = 1;
         }
 
         private void EnsureEventSystem()
