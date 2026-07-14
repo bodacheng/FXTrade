@@ -21,7 +21,7 @@ namespace TestFXTrade.Fx.Analysis
             if (account == null || position == null || risk == null || quote == null)
             {
                 result.Action = RecommendationAction.Hold;
-                result.Summary = "Missing account, position, risk, or quote input.";
+                result.Summary = "缺少账户、持仓、风控或报价参数。";
                 result.Warnings.Add(result.Summary);
                 return result;
             }
@@ -46,15 +46,15 @@ namespace TestFXTrade.Fx.Analysis
             if (result.MaxSafeGrossLots < FxConstants.MinTradableLot)
             {
                 result.Action = RecommendationAction.Hold;
-                result.Summary = "Hold: risk or margin budget is below the minimum practical lot size.";
-                result.Warnings.Add("Safe lot capacity is below 0.01 lot.");
+                result.Summary = "观望：风险或保证金预算低于最小可交易 lot。";
+                result.Warnings.Add("安全可交易量低于 0.01 lot。");
                 return result;
             }
 
-            if (result.Warnings.Exists(warning => warning.StartsWith("Live data is stale", StringComparison.Ordinal)))
+            if (result.Warnings.Exists(warning => warning.StartsWith("实时数据已过期", StringComparison.Ordinal)))
             {
                 result.Action = RecommendationAction.Hold;
-                result.Summary = "Hold: live price is stale, so no trading-size recommendation is safe.";
+                result.Summary = "观望：实时报价已过期，无法安全计算交易量建议。";
                 return result;
             }
 
@@ -62,8 +62,8 @@ namespace TestFXTrade.Fx.Analysis
             {
                 result.Action = RecommendationAction.Hold;
                 result.TargetNetLots = position.NetLots;
-                result.Summary = "Hold: USD/JPY trend signal is not strong enough.";
-                result.Reasons.Add("EMA, RSI, ATR, and short momentum do not agree strongly.");
+                result.Summary = "观望：USD/JPY 趋势信号不够强。";
+                result.Reasons.Add("EMA、RSI、ATR 与短期动量信号未形成明确共识。");
                 return result;
             }
 
@@ -75,8 +75,8 @@ namespace TestFXTrade.Fx.Analysis
             if (Math.Abs(delta) < FxConstants.MinTradableLot)
             {
                 result.Action = RecommendationAction.Hold;
-                result.Summary = "Hold: current net position is already close to the calculated target.";
-                result.Reasons.Add($"Target net position is {result.TargetNetLots:0.00} lots.");
+                result.Summary = "观望：当前净头寸已接近计算目标。";
+                result.Reasons.Add($"目标净头寸为 {result.TargetNetLots:0.00} lots。");
                 return result;
             }
 
@@ -85,19 +85,19 @@ namespace TestFXTrade.Fx.Analysis
                 result.Action = RecommendationAction.Buy;
                 result.SuggestedBuyLots = RoundLot(delta);
                 result.RequiredMarginForSuggestion = result.SuggestedBuyLots * result.MarginPerLotAccountCurrency;
-                result.Summary = $"Buy up to {result.SuggestedBuyLots:0.00} lots of USD/JPY.";
+                result.Summary = $"建议买入最多 {result.SuggestedBuyLots:0.00} lots USD/JPY。";
             }
             else
             {
                 result.Action = RecommendationAction.Sell;
                 result.SuggestedSellLots = RoundLot(Math.Abs(delta));
                 result.RequiredMarginForSuggestion = result.SuggestedSellLots * result.MarginPerLotAccountCurrency;
-                result.Summary = $"Sell or reduce net long exposure by {result.SuggestedSellLots:0.00} lots of USD/JPY.";
+                result.Summary = $"建议卖出或减少 {result.SuggestedSellLots:0.00} lots USD/JPY 净多头。";
             }
 
-            result.Reasons.Add($"Trend score is {result.TrendScore:0.00}, based on EMA, RSI, ATR, momentum, and slope.");
-            result.Reasons.Add($"Risk cap allows {safeLotsByStop:0.00} lots by stop-loss and {safeLotsByMargin:0.00} lots by margin.");
-            result.Reasons.Add($"Planned stop is {risk.PlannedStopLossPips:0.#} pips; ATR is {atrPips:0.#} pips.");
+            result.Reasons.Add($"趋势评分为 {result.TrendScore:0.00}，依据 EMA、RSI、ATR、动量与斜率计算。");
+            result.Reasons.Add($"风险上限允许止损侧 {safeLotsByStop:0.00} lots、保证金侧 {safeLotsByMargin:0.00} lots。");
+            result.Reasons.Add($"计划止损为 {risk.PlannedStopLossPips:0.#} pips，ATR 为 {atrPips:0.#} pips。");
             return result;
         }
 
@@ -105,7 +105,7 @@ namespace TestFXTrade.Fx.Analysis
         {
             if (candles == null || candles.Count < 60)
             {
-                result.Warnings.Add("Less than 60 candles were available; signal quality is reduced.");
+                result.Warnings.Add("可用K线少于 60 根，信号质量有所下降。");
             }
 
             if (quote.IsTimestampReliable)
@@ -113,17 +113,17 @@ namespace TestFXTrade.Fx.Analysis
                 double staleMinutes = (DateTime.UtcNow - quote.TimeUtc).TotalMinutes;
                 if (staleMinutes > 15d)
                 {
-                    result.Warnings.Add($"Live data is stale by {staleMinutes:0.#} minutes.");
+                    result.Warnings.Add($"实时数据已过期 {staleMinutes:0.#} 分钟。");
                 }
             }
             else
             {
-                result.Warnings.Add("Quote timestamp could not be verified by the data provider.");
+                result.Warnings.Add("数据源无法验证报价时间戳。");
             }
 
             if (risk.EstimatedSpreadPips > 3d)
             {
-                result.Warnings.Add("Estimated spread is high for USD/JPY; suggested size is reduced.");
+                result.Warnings.Add("USD/JPY 预估点差较高，建议交易量已降低。");
             }
         }
 
@@ -131,12 +131,12 @@ namespace TestFXTrade.Fx.Analysis
         {
             if (price >= StrongInterventionRiskPrice)
             {
-                result.Warnings.Add("USD/JPY is above 160; yen intervention headline risk is elevated.");
+                result.Warnings.Add("USD/JPY 高于 160，日元干预相关消息风险上升。");
             }
 
             if (atrPips >= 35d)
             {
-                result.Warnings.Add("Short-term ATR is high; volatility-adjusted size is reduced.");
+                result.Warnings.Add("短期 ATR 较高，按波动率调整后的交易量已降低。");
             }
         }
 

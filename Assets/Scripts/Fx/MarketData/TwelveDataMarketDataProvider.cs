@@ -31,7 +31,7 @@ namespace TestFXTrade.Fx.MarketData
 
             if (response == null)
             {
-                throw new InvalidOperationException("Quote response was empty.");
+                throw new InvalidOperationException("报价响应为空。");
             }
 
             ThrowIfApiError(response.status, response.message);
@@ -65,14 +65,14 @@ namespace TestFXTrade.Fx.MarketData
 
             if (response == null)
             {
-                throw new InvalidOperationException("Time series response was empty.");
+                throw new InvalidOperationException("K线响应为空。");
             }
 
             ThrowIfApiError(response.status, response.message);
 
             if (response.values == null || response.values.Length == 0)
             {
-                throw new InvalidOperationException("No candle data was returned.");
+                throw new InvalidOperationException("数据源未返回K线数据。");
             }
 
             List<Candle> candles = new List<Candle>(response.values.Length);
@@ -94,7 +94,7 @@ namespace TestFXTrade.Fx.MarketData
         {
             if (string.IsNullOrWhiteSpace(apiKey))
             {
-                throw new InvalidOperationException("Set TWELVE_DATA_API_KEY in local .env before starting the app.");
+                throw new InvalidOperationException("请先在本地 .env 中配置 TWELVE_DATA_API_KEY。");
             }
         }
 
@@ -112,7 +112,7 @@ namespace TestFXTrade.Fx.MarketData
 
             if (request.result != UnityWebRequest.Result.Success)
             {
-                throw new InvalidOperationException(request.error);
+                throw new InvalidOperationException($"网络请求失败：{request.error}");
             }
 
             return request.downloadHandler.text;
@@ -122,7 +122,8 @@ namespace TestFXTrade.Fx.MarketData
         {
             if (string.Equals(status, "error", StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException(string.IsNullOrWhiteSpace(message) ? "Twelve Data returned an API error." : message);
+                string detail = string.IsNullOrWhiteSpace(message) ? "未提供详细信息" : message;
+                throw new InvalidOperationException($"Twelve Data API 错误：{detail}");
             }
         }
 
@@ -130,7 +131,7 @@ namespace TestFXTrade.Fx.MarketData
         {
             if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed))
             {
-                throw new InvalidOperationException($"Could not parse {fieldName} value '{value}'.");
+                throw new InvalidOperationException($"无法解析 {fieldName} 的值“{value}”。");
             }
 
             return parsed;

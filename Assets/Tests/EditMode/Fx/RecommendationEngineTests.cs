@@ -52,7 +52,7 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 BuildTrendingCandles(150d, 0.018d));
 
             Assert.AreEqual(RecommendationAction.Hold, recommendation.Action);
-            Assert.That(recommendation.Summary, Does.Contain("stale"));
+            Assert.That(recommendation.Summary, Does.Contain("过期"));
         }
 
         private static IReadOnlyList<Candle> BuildTrendingCandles(double start, double step)

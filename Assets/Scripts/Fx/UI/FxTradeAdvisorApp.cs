@@ -20,6 +20,17 @@ namespace TestFXTrade.Fx.UI
         private const float CandleRefreshSeconds = 60f;
         private const int CandleOutputSize = 160;
         private static readonly Vector2 MobileReferenceResolution = new Vector2(390f, 844f);
+        private static readonly string[] ChineseFontNames =
+        {
+            "PingFang SC",
+            "Heiti SC",
+            "STHeiti",
+            "Noto Sans CJK SC",
+            "Noto Sans SC",
+            "Microsoft YaHei",
+            "Droid Sans Fallback",
+            "Arial Unicode MS"
+        };
 
         private Font font;
         private InputField principalInput;
@@ -75,7 +86,12 @@ namespace TestFXTrade.Fx.UI
         {
             ConfigurePortraitRuntime();
 
-            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            font = Font.CreateDynamicFontFromOSFont(ChineseFontNames, 16);
+            if (font == null)
+            {
+                font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            }
+
             if (font == null)
             {
                 font = Resources.GetBuiltinResource<Font>("Arial.ttf");
@@ -92,17 +108,17 @@ namespace TestFXTrade.Fx.UI
             if (settings.HasApiKey)
             {
                 marketDataProvider = new TwelveDataMarketDataProvider(apiKey);
-                marketSourceText.text = $"Market data: Twelve Data ({settings.SourceLabel})";
-                SetStatus("Local API key loaded. Refreshing live USD/JPY data.");
+                marketSourceText.text = $"行情数据：Twelve Data（{LocalizeSourceLabel(settings.SourceLabel)}）";
+                SetStatus("已读取本地 API Key，正在刷新 USD/JPY 实时行情。");
                 nextQuoteRefreshAt = Time.time + QuoteRefreshSeconds;
                 nextCandleRefreshAt = Time.time + CandleRefreshSeconds;
                 _ = RefreshCandlesAndQuoteAsync(true);
                 return;
             }
 
-            marketSourceText.text = $"Market data: missing {LocalFxSettings.ApiKeyVariableName}";
-            SetStatus("Add TWELVE_DATA_API_KEY to .env before starting the app.");
-            warningsText.text = "Create .env from .env.example in the project root, then restart.";
+            marketSourceText.text = $"行情数据：缺少 {LocalFxSettings.ApiKeyVariableName}";
+            SetStatus("请先在 .env 中配置 TWELVE_DATA_API_KEY。");
+            warningsText.text = "请根据项目根目录中的 .env.example 创建 .env，然后重新启动。";
             nextQuoteRefreshAt = float.PositiveInfinity;
             nextCandleRefreshAt = float.PositiveInfinity;
         }
@@ -168,16 +184,16 @@ namespace TestFXTrade.Fx.UI
 
         private void BuildMarketControls(Transform parent)
         {
-            AddHeader(parent, "USD/JPY Advisor");
-            marketSourceText = AddCompactInfoText(parent, "Market data: loading local config.");
+            AddHeader(parent, "USD/JPY 交易助手");
+            marketSourceText = AddCompactInfoText(parent, "正在读取本地行情配置……");
 
             Transform controls = CreateCompactFieldRow(parent, "Market Controls");
-            AddValueRow(controls, "Pair", FxConstants.UsdJpySymbol);
-            intervalDropdown = AddDropdown(controls, "Interval", new List<string> { "1min", "5min", "15min" }, 1);
+            AddValueRow(controls, "交易对", FxConstants.UsdJpySymbol);
+            intervalDropdown = AddDropdown(controls, "周期", new List<string> { "1min", "5min", "15min" }, 1);
             intervalDropdown.onValueChanged.AddListener(unused => { _ = RefreshCandlesAndQuoteAsync(true); });
-            autoRefreshToggle = AddToggle(controls, "Live 5s", true);
+            autoRefreshToggle = AddToggle(controls, "实时 5秒", true);
 
-            Button refreshButton = AddButton(controls, "Refresh");
+            Button refreshButton = AddButton(controls, "手动刷新");
             refreshButton.onClick.AddListener(() => _ = RefreshCandlesAndQuoteAsync(true));
 
             statusText = AddCompactInfoText(parent, string.Empty);
@@ -186,28 +202,28 @@ namespace TestFXTrade.Fx.UI
 
         private void BuildInputColumn(Transform parent)
         {
-            Transform accountFields = CreateCompactSection(parent, "Account");
-            principalInput = AddInput(accountFields, "Principal", "1000000");
-            equityInput = AddInput(accountFields, "Equity", "1000000");
-            currencyDropdown = AddDropdown(accountFields, "Currency", new List<string> { "JPY", "USD" }, 0);
-            leverageInput = AddInput(accountFields, "Leverage", "25");
+            Transform accountFields = CreateCompactSection(parent, "账户");
+            principalInput = AddInput(accountFields, "本金", "1000000");
+            equityInput = AddInput(accountFields, "净值", "1000000");
+            currencyDropdown = AddDropdown(accountFields, "币种", new List<string> { "JPY", "USD" }, 0);
+            leverageInput = AddInput(accountFields, "杠杆", "25");
 
-            Transform riskFields = CreateCompactSection(parent, "Risk Rules");
-            riskPercentInput = AddInput(riskFields, "Risk %", "1");
-            marginPercentInput = AddInput(riskFields, "Margin %", "30");
-            stopLossPipsInput = AddInput(riskFields, "Stop Pips", "40");
-            spreadPipsInput = AddInput(riskFields, "Spread", "0.2");
+            Transform riskFields = CreateCompactSection(parent, "风控参数");
+            riskPercentInput = AddInput(riskFields, "单笔风险 %", "1");
+            marginPercentInput = AddInput(riskFields, "保证金 %", "30");
+            stopLossPipsInput = AddInput(riskFields, "止损 pips", "40");
+            spreadPipsInput = AddInput(riskFields, "点差", "0.2");
 
-            Transform positionFields = CreateCompactSection(parent, "Current Position");
-            longLotsInput = AddInput(positionFields, "Long Lots", "0");
-            shortLotsInput = AddInput(positionFields, "Short Lots", "0");
-            averageLongEntryInput = AddInput(positionFields, "Long Avg", "0");
-            averageShortEntryInput = AddInput(positionFields, "Short Avg", "0");
+            Transform positionFields = CreateCompactSection(parent, "当前持仓");
+            longLotsInput = AddInput(positionFields, "多单 lots", "0");
+            shortLotsInput = AddInput(positionFields, "空单 lots", "0");
+            averageLongEntryInput = AddInput(positionFields, "多单均价", "0");
+            averageShortEntryInput = AddInput(positionFields, "空单均价", "0");
         }
 
         private void BuildOutputColumn(Transform parent)
         {
-            quoteText = AddQuoteText(parent, "Waiting for live USD/JPY");
+            quoteText = AddQuoteText(parent, "正在等待 USD/JPY 实时行情");
 
             GameObject chartPanel = CreatePanel("ChartPanel", parent, new Color32(12, 14, 17, 255));
             LayoutElement chartLayout = chartPanel.AddComponent<LayoutElement>();
@@ -225,8 +241,8 @@ namespace TestFXTrade.Fx.UI
             chartGraphic.color = Color.white;
             chartGraphic.raycastTarget = false;
 
-            metricsText = AddBodyText(parent, "Market metrics will appear here.");
-            recommendationText = AddBodyText(parent, "No recommendation yet.");
+            metricsText = AddBodyText(parent, "行情指标将在此显示。");
+            recommendationText = AddBodyText(parent, "暂无交易建议。");
             LayoutElement recommendationLayout = recommendationText.GetComponent<LayoutElement>();
             recommendationLayout.minHeight = 42;
             recommendationLayout.preferredHeight = 42;
@@ -245,7 +261,7 @@ namespace TestFXTrade.Fx.UI
             {
                 if (manual)
                 {
-                    SetStatus("Live refresh is already running.");
+                    SetStatus("实时行情正在刷新中。");
                 }
 
                 return;
@@ -261,13 +277,13 @@ namespace TestFXTrade.Fx.UI
             {
                 if (string.IsNullOrWhiteSpace(apiKey))
                 {
-                    SetStatus("Missing local API key.");
-                    warningsText.text = $"Set {LocalFxSettings.ApiKeyVariableName} in .env before starting the app.";
+                    SetStatus("缺少本地 API Key。");
+                    warningsText.text = $"请先在 .env 中配置 {LocalFxSettings.ApiKeyVariableName}。";
                     return;
                 }
 
                 string symbol = FxConstants.UsdJpySymbol;
-                SetStatus($"Fetching live {symbol} quote and candles...");
+                SetStatus($"正在获取 {symbol} 实时报价与K线……");
 
                 IFxMarketDataProvider provider = GetMarketDataProvider();
                 string interval = GetSelectedInterval();
@@ -283,16 +299,16 @@ namespace TestFXTrade.Fx.UI
 
                 latestQuote = quoteTask.Result;
                 ReplaceLatestCandles(candlesTask.Result);
-                RenderLatestMarketState(interval, $"Updated from {provider.ProviderName} at {DateTime.Now:HH:mm:ss}.");
+                RenderLatestMarketState(interval, $"{provider.ProviderName} 数据已更新：{DateTime.Now:HH:mm:ss}");
             }
             catch (OperationCanceledException)
             {
-                SetStatus("Refresh cancelled.");
+                SetStatus("已取消刷新。");
             }
             catch (Exception ex)
             {
-                SetStatus("Live data unavailable.");
-                recommendationText.text = "Hold: no recommendation while live data is unavailable.";
+                SetStatus("实时行情暂不可用。");
+                recommendationText.text = "观望：实时行情不可用，暂不提供交易建议。";
                 warningsText.text = ex.Message;
             }
             finally
@@ -308,7 +324,7 @@ namespace TestFXTrade.Fx.UI
             {
                 if (manual)
                 {
-                    SetStatus("Live quote refresh is already running.");
+                    SetStatus("实时报价正在刷新中。");
                 }
 
                 return;
@@ -322,13 +338,13 @@ namespace TestFXTrade.Fx.UI
             {
                 if (string.IsNullOrWhiteSpace(apiKey))
                 {
-                    SetStatus("Missing local API key.");
-                    warningsText.text = $"Set {LocalFxSettings.ApiKeyVariableName} in .env before starting the app.";
+                    SetStatus("缺少本地 API Key。");
+                    warningsText.text = $"请先在 .env 中配置 {LocalFxSettings.ApiKeyVariableName}。";
                     return;
                 }
 
                 string symbol = FxConstants.UsdJpySymbol;
-                SetStatus($"Updating live {symbol} quote...");
+                SetStatus($"正在更新 {symbol} 实时报价……");
 
                 IFxMarketDataProvider provider = GetMarketDataProvider();
                 latestQuote = await provider.GetLatestQuoteAsync(symbol, token);
@@ -338,15 +354,15 @@ namespace TestFXTrade.Fx.UI
                     return;
                 }
 
-                RenderLatestMarketState(GetSelectedInterval(), $"Live quote updated at {DateTime.Now:HH:mm:ss}.");
+                RenderLatestMarketState(GetSelectedInterval(), $"实时报价已更新：{DateTime.Now:HH:mm:ss}");
             }
             catch (OperationCanceledException)
             {
-                SetStatus("Refresh cancelled.");
+                SetStatus("已取消刷新。");
             }
             catch (Exception ex)
             {
-                SetStatus("Live quote unavailable.");
+                SetStatus("实时报价暂不可用。");
                 warningsText.text = ex.Message;
             }
             finally
@@ -457,22 +473,22 @@ namespace TestFXTrade.Fx.UI
         {
             string freshness = quote.IsTimestampReliable
                 ? $"{quote.TimeUtc:yyyy-MM-dd HH:mm:ss} UTC"
-                : "provider timestamp unavailable";
+                : "数据源时间戳不可用";
 
-            quoteText.text = $"{quote.Symbol} {quote.Price:0.000}\n{freshness}  |  {interval} x {candles.Count}";
+            quoteText.text = $"{quote.Symbol} {quote.Price:0.000}\n{freshness} | {interval} | {candles.Count} 根K线";
 
             AccountSnapshot account = ReadAccount();
             string currency = account.Currency == AccountCurrency.Jpy ? "JPY" : "USD";
 
             StringBuilder metrics = new StringBuilder();
-            metrics.AppendLine($"Trend {recommendation.TrendScore:0.00}   Confidence {recommendation.Confidence:0.00}   RSI {recommendation.Rsi:0.0}   ATR {recommendation.AtrPips:0.0} pips");
-            metrics.AppendLine($"Pip/lot {recommendation.PipValuePerLotAccountCurrency:0.##} {currency}   Margin/lot {recommendation.MarginPerLotAccountCurrency:0.##} {currency}");
-            metrics.Append($"Net {recommendation.CurrentNetLots:0.00}   Target {recommendation.TargetNetLots:0.00}   Max {recommendation.MaxSafeGrossLots:0.00} lots");
+            metrics.AppendLine($"趋势 {recommendation.TrendScore:0.00}   置信度 {recommendation.Confidence:0.00}   RSI {recommendation.Rsi:0.0}   ATR {recommendation.AtrPips:0.0} pips");
+            metrics.AppendLine($"Pip/lot {recommendation.PipValuePerLotAccountCurrency:0.##} {currency}   保证金/lot {recommendation.MarginPerLotAccountCurrency:0.##} {currency}");
+            metrics.Append($"当前净头寸 {recommendation.CurrentNetLots:0.00}   目标 {recommendation.TargetNetLots:0.00}   安全上限 {recommendation.MaxSafeGrossLots:0.00} lots");
             metricsText.text = metrics.ToString();
 
             StringBuilder advice = new StringBuilder();
             advice.AppendLine(recommendation.Summary);
-            advice.Append($"Buy {recommendation.SuggestedBuyLots:0.00}   Sell {recommendation.SuggestedSellLots:0.00}   Margin {recommendation.RequiredMarginForSuggestion:0.##} {currency}");
+            advice.Append($"买入 {recommendation.SuggestedBuyLots:0.00}   卖出 {recommendation.SuggestedSellLots:0.00}   保证金 {recommendation.RequiredMarginForSuggestion:0.##} {currency}");
 
             if (recommendation.Reasons.Count > 0)
             {
@@ -484,11 +500,11 @@ namespace TestFXTrade.Fx.UI
 
             if (recommendation.Warnings.Count == 0)
             {
-                warningsText.text = "Risk: no blocking warning from the current inputs.";
+                warningsText.text = "风险提示：当前参数没有触发阻断性警告。";
             }
             else
             {
-                StringBuilder warnings = new StringBuilder("Risk: ");
+                StringBuilder warnings = new StringBuilder("风险提示：");
                 for (int i = 0; i < recommendation.Warnings.Count; i++)
                 {
                     if (i > 0)
@@ -532,6 +548,25 @@ namespace TestFXTrade.Fx.UI
 
             int index = Mathf.Clamp(intervalDropdown.value, 0, intervalDropdown.options.Count - 1);
             return intervalDropdown.options[index].text;
+        }
+
+        private static string LocalizeSourceLabel(string sourceLabel)
+        {
+            switch (sourceLabel)
+            {
+                case "environment variable":
+                    return "环境变量";
+                case "project .env":
+                    return "项目 .env";
+                case "current directory .env":
+                    return "当前目录 .env";
+                case "persistent .env":
+                    return "持久化目录 .env";
+                case "local .env":
+                    return "本地 .env";
+                default:
+                    return sourceLabel;
+            }
         }
 
         private void CancelMarketDataRequests()
@@ -929,7 +964,7 @@ namespace TestFXTrade.Fx.UI
             Toggle itemToggle = item.AddComponent<Toggle>();
             itemToggle.targetGraphic = itemBackground;
 
-            Text itemText = AddText(item.transform, "Option", 12, FontStyle.Normal, new Color32(238, 242, 247, 255));
+            Text itemText = AddText(item.transform, "选项", 12, FontStyle.Normal, new Color32(238, 242, 247, 255));
             RectTransform itemTextRect = itemText.GetComponent<RectTransform>();
             itemTextRect.anchorMin = Vector2.zero;
             itemTextRect.anchorMax = Vector2.one;
@@ -980,7 +1015,7 @@ namespace TestFXTrade.Fx.UI
             background.color = new Color32(55, 132, 93, 255);
             Button button = buttonObject.AddComponent<Button>();
             button.targetGraphic = background;
-            Text text = AddText(buttonObject.transform, "Run", 11, FontStyle.Bold, Color.white);
+            Text text = AddText(buttonObject.transform, "刷新", 11, FontStyle.Bold, Color.white);
             text.alignment = TextAnchor.MiddleCenter;
             RectTransform textRect = text.GetComponent<RectTransform>();
             Stretch(textRect);
