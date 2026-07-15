@@ -28,8 +28,11 @@ Recordings/
 # Crash and build artifacts
 *.apk
 *.aab
+*.ipa
 *.unitypackage
 *.app
+*.xcarchive
+build_ios/
 
 # Local-only Unity user settings
 UserSettings/
