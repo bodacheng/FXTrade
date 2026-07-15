@@ -8,11 +8,19 @@ namespace TestFXTrade.Fx.MarketData
     public sealed class LocalFxSettings
     {
         public const string ApiKeyVariableName = "TWELVE_DATA_API_KEY";
+        public const string OpenAiApiKeyVariableName = "OPENAI_API_KEY";
 
         public LocalFxSettings(string apiKey, string sourceLabel)
+            : this(apiKey, sourceLabel, string.Empty, "local .env")
+        {
+        }
+
+        public LocalFxSettings(string apiKey, string sourceLabel, string openAiApiKey, string openAiSourceLabel)
         {
             ApiKey = apiKey ?? string.Empty;
             SourceLabel = sourceLabel ?? string.Empty;
+            OpenAiApiKey = openAiApiKey ?? string.Empty;
+            OpenAiSourceLabel = openAiSourceLabel ?? string.Empty;
         }
 
         public string ApiKey { get; }
@@ -21,8 +29,19 @@ namespace TestFXTrade.Fx.MarketData
 
         public bool HasApiKey => !string.IsNullOrWhiteSpace(ApiKey);
 
+        public string OpenAiApiKey { get; }
+
+        public string OpenAiSourceLabel { get; }
+
+        public bool HasOpenAiApiKey => !string.IsNullOrWhiteSpace(OpenAiApiKey);
+
         public static LocalFxSettings Load()
         {
+            string marketApiKey = string.Empty;
+            string marketSourceLabel = "local .env";
+            string openAiApiKey = string.Empty;
+            string openAiSourceLabel = "local .env";
+
             foreach (EnvCandidate candidate in GetCandidateEnvPaths())
             {
                 if (!File.Exists(candidate.Path))
@@ -30,20 +49,44 @@ namespace TestFXTrade.Fx.MarketData
                     continue;
                 }
 
-                string apiKey = ReadEnvValue(candidate.Path, ApiKeyVariableName);
-                if (!string.IsNullOrWhiteSpace(apiKey))
+                if (string.IsNullOrWhiteSpace(marketApiKey))
                 {
-                    return new LocalFxSettings(apiKey, candidate.Label);
+                    marketApiKey = ReadEnvValue(candidate.Path, ApiKeyVariableName);
+                    if (!string.IsNullOrWhiteSpace(marketApiKey))
+                    {
+                        marketSourceLabel = candidate.Label;
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(openAiApiKey))
+                {
+                    openAiApiKey = ReadEnvValue(candidate.Path, OpenAiApiKeyVariableName);
+                    if (!string.IsNullOrWhiteSpace(openAiApiKey))
+                    {
+                        openAiSourceLabel = candidate.Label;
+                    }
                 }
             }
 
-            string environmentApiKey = Environment.GetEnvironmentVariable(ApiKeyVariableName);
-            if (!string.IsNullOrWhiteSpace(environmentApiKey))
+            if (string.IsNullOrWhiteSpace(marketApiKey))
             {
-                return new LocalFxSettings(environmentApiKey, "environment variable");
+                marketApiKey = Environment.GetEnvironmentVariable(ApiKeyVariableName);
+                if (!string.IsNullOrWhiteSpace(marketApiKey))
+                {
+                    marketSourceLabel = "environment variable";
+                }
             }
 
-            return new LocalFxSettings(string.Empty, "local .env");
+            if (string.IsNullOrWhiteSpace(openAiApiKey))
+            {
+                openAiApiKey = Environment.GetEnvironmentVariable(OpenAiApiKeyVariableName);
+                if (!string.IsNullOrWhiteSpace(openAiApiKey))
+                {
+                    openAiSourceLabel = "environment variable";
+                }
+            }
+
+            return new LocalFxSettings(marketApiKey, marketSourceLabel, openAiApiKey, openAiSourceLabel);
         }
 
         private static IEnumerable<EnvCandidate> GetCandidateEnvPaths()
