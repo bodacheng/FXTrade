@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using TestFXTrade.Fx.Analysis;
@@ -9,6 +10,7 @@ using TestFXTrade.Fx.Domain;
 using TestFXTrade.Fx.MarketData;
 using TestFXTrade.Fx.OpenAI;
 using TestFXTrade.Fx.Sbi;
+using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -21,53 +23,49 @@ namespace TestFXTrade.Fx.UI
         private const float QuoteRefreshSeconds = 5f;
         private const float CandleRefreshSeconds = 60f;
         private const int CandleOutputSize = 160;
-        private const int DynamicFontSize = 16;
-        private const float CjkLineSpacing = 1.15f;
+        private const int DynamicFontSize = 90;
         private const string ChineseFontProbeText = "中文交易建议保证金行情规则买卖";
+        private const NumberStyles UserNumberStyles = NumberStyles.Float | NumberStyles.AllowThousands;
         private static readonly Vector2 MobileReferenceResolution = new Vector2(390f, 844f);
-        private static readonly string[] ChineseFontNames =
+        private static readonly Regex VisibleLotQuantityPattern = new Regex(
+            @"(?<value>[+-]?\d+(?:\.\d+)?)\s*(?:standard\s*)?lots?\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        private static readonly Regex VisibleLotWordPattern = new Regex(
+            @"\blots?\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        private static readonly string[,] ChineseSystemFontCandidates =
         {
-            "PingFangSC-Regular",
-            "PingFangSC-Medium",
-            "PingFangSC-Semibold",
-            "PingFang SC",
-            ".PingFang SC",
-            "HeitiSC-Light",
-            "HeitiSC-Medium",
-            "Heiti SC",
-            "STHeiti",
-            "STHeitiSC-Light",
-            "STHeitiSC-Medium",
-            "HiraginoSansGB-W3",
-            "Hiragino Sans GB",
-            "Noto Sans CJK SC",
-            "Noto Sans SC",
-            "Microsoft YaHei",
-            "Droid Sans Fallback",
-            "Arial Unicode MS"
+            { "PingFang SC", null },
+            { "PingFang SC", "Medium" },
+            { "Heiti SC", null },
+            { "STHeiti", null },
+            { "Hiragino Sans GB", null },
+            { "Noto Sans CJK SC", null },
+            { "Noto Sans SC", null },
+            { "Microsoft YaHei", null },
+            { "Droid Sans Fallback", null },
+            { "Arial Unicode MS", null }
         };
 
-        private Font font;
-        private InputField principalInput;
-        private InputField netPositionInput;
-        private Dropdown intervalDropdown;
+        private TMP_FontAsset font;
+        private TMP_InputField principalInput;
+        private TMP_InputField netPositionInput;
+        private TMP_Dropdown intervalDropdown;
         private Toggle autoRefreshToggle;
         private Button syncSbiRulesButton;
         private Button requestAiAdviceButton;
         private Button aggressiveAiAdviceButton;
-        private Text marketSourceText;
-        private Text statusText;
-        private Text sbiRulesText;
-        private Text quoteText;
-        private Text metricsText;
-        private Text recommendationText;
-        private Text warningsText;
+        private TMP_Text marketSourceText;
+        private TMP_Text statusText;
+        private TMP_Text sbiRulesText;
+        private TMP_Text quoteText;
+        private TMP_Text metricsText;
+        private TMP_Text recommendationText;
+        private TMP_Text warningsText;
         private UsdJpyTrendLineGraphic chartGraphic;
         private CanvasScaler canvasScaler;
         private RectTransform safeAreaContentRect;
-        private CanvasGroup contentCanvasGroup;
-        private GameObject loadingOverlay;
-        private Text loadingTaskText;
+        private GameObject loadingIndicator;
         private RectTransform loadingSpinnerRect;
         private Rect lastSafeArea = new Rect(-1f, -1f, -1f, -1f);
         private Vector2Int lastScreenSize = new Vector2Int(-1, -1);
@@ -180,7 +178,6 @@ namespace TestFXTrade.Fx.UI
             GameObject content = CreateUiObject("Safe Area Content", root.transform);
             safeAreaContentRect = content.GetComponent<RectTransform>();
             Stretch(safeAreaContentRect);
-            contentCanvasGroup = content.AddComponent<CanvasGroup>();
 
             VerticalLayoutGroup contentGroup = content.AddComponent<VerticalLayoutGroup>();
             contentGroup.padding = new RectOffset(10, 10, 8, 8);
@@ -193,7 +190,7 @@ namespace TestFXTrade.Fx.UI
             BuildMarketControls(content.transform);
             BuildInputColumn(content.transform);
             BuildOutputColumn(content.transform);
-            BuildLoadingOverlay(root.transform);
+            BuildLoadingIndicator(content.transform);
             RefreshAdaptiveLayout(true);
         }
 
@@ -222,8 +219,8 @@ namespace TestFXTrade.Fx.UI
             smartSectionLayout.minHeight = 110;
             smartSectionLayout.preferredHeight = 110;
 
-            principalInput = AddInput(smartFields, "本金 JPY", "1000000");
-            netPositionInput = AddInput(smartFields, "净持仓 lots", "0");
+            principalInput = AddInput(smartFields, "本金 JPY", "1000000", false, TMP_InputField.ContentType.Standard);
+            netPositionInput = AddInput(smartFields, "净建玉数量", "0", false, TMP_InputField.ContentType.Standard);
 
             syncSbiRulesButton = AddButton(smartFields, "SBI规则", "同步");
             syncSbiRulesButton.onClick.AddListener(() => _ = SyncSbiRulesAsync());
@@ -260,7 +257,7 @@ namespace TestFXTrade.Fx.UI
             chartGraphic.raycastTarget = false;
 
             metricsText = AddBodyText(parent, "行情指标将在此显示。");
-            recommendationText = AddBodyText(parent, "输入本金和净持仓，同步SBI规则后即可获取AI建议。");
+            recommendationText = AddBodyText(parent, "输入本金和净建玉数量，同步SBI规则后即可获取AI建议。");
             recommendationText.gameObject.name = "AI Advice Text";
             LayoutElement recommendationLayout = recommendationText.GetComponent<LayoutElement>();
             recommendationLayout.minHeight = 104;
@@ -466,11 +463,14 @@ namespace TestFXTrade.Fx.UI
             quoteText.text = $"{quote.Symbol} {quote.Price:0.000}\n{freshness} | {interval} | {candles.Count} 根K线";
 
             double trendScore = TechnicalIndicatorService.CalculateTrendScore(candles, out double atrPips, out double rsi);
-            double netPosition = ParseInput(netPositionInput, 0d);
-            string positionLabel = netPosition > 0d ? "多" : netPosition < 0d ? "空" : "空仓";
+            double netPositionQuantity = ParseInput(netPositionInput, 0d);
+            string positionLabel = netPositionQuantity > 0d ? "多" : netPositionQuantity < 0d ? "空" : "空仓";
+            string quantityRuleText = sbiRules != null && sbiRules.IsUsable
+                ? $"最小 {sbiRules.MinimumOrderUnits:N0} 通貨"
+                : "输入单位：通貨";
             metricsText.text =
                 $"趋势 {trendScore:0.00}   RSI {rsi:0.0}   ATR {atrPips:0.0} pips\n" +
-                $"当前净持仓 {netPosition:0.###} lots（{positionLabel}）   1 lot = 100,000 通货";
+                $"当前净建玉数量 {FormatBaseCurrencyUnits(netPositionQuantity)} 通貨（{positionLabel}）   {quantityRuleText}";
         }
 
         private async Task SyncSbiRulesAsync()
@@ -598,74 +598,38 @@ namespace TestFXTrade.Fx.UI
             }
         }
 
-        private void BuildLoadingOverlay(Transform parent)
+        private void BuildLoadingIndicator(Transform parent)
         {
-            loadingOverlay = CreateUiObject("Loading Overlay", parent);
-            RectTransform overlayRect = loadingOverlay.GetComponent<RectTransform>();
-            Stretch(overlayRect);
+            loadingIndicator = CreateUiObject("Loading Indicator", parent);
+            RectTransform indicatorRect = loadingIndicator.GetComponent<RectTransform>();
+            indicatorRect.anchorMin = Vector2.one;
+            indicatorRect.anchorMax = Vector2.one;
+            indicatorRect.pivot = Vector2.one;
+            indicatorRect.anchoredPosition = new Vector2(-2f, -2f);
+            indicatorRect.sizeDelta = new Vector2(32f, 32f);
+            LayoutElement indicatorLayout = loadingIndicator.AddComponent<LayoutElement>();
+            indicatorLayout.ignoreLayout = true;
 
-            Image backdrop = loadingOverlay.AddComponent<Image>();
-            backdrop.color = new Color32(7, 9, 11, 224);
-            backdrop.raycastTarget = true;
+            Image indicatorBackground = loadingIndicator.AddComponent<Image>();
+            indicatorBackground.color = new Color32(25, 29, 34, 230);
+            indicatorBackground.raycastTarget = false;
 
-            GameObject panel = CreateUiObject("Loading Panel", loadingOverlay.transform);
-            RectTransform panelRect = panel.GetComponent<RectTransform>();
-            panelRect.anchorMin = new Vector2(0.5f, 0.5f);
-            panelRect.anchorMax = new Vector2(0.5f, 0.5f);
-            panelRect.pivot = new Vector2(0.5f, 0.5f);
-            panelRect.sizeDelta = new Vector2(310f, 126f);
-            Image panelImage = panel.AddComponent<Image>();
-            panelImage.color = new Color32(25, 29, 34, 255);
-            panelImage.raycastTarget = false;
-
-            GameObject accent = CreateUiObject("Accent", panel.transform);
-            RectTransform accentRect = accent.GetComponent<RectTransform>();
-            accentRect.anchorMin = new Vector2(0f, 1f);
-            accentRect.anchorMax = new Vector2(1f, 1f);
-            accentRect.pivot = new Vector2(0.5f, 1f);
-            accentRect.sizeDelta = new Vector2(0f, 3f);
-            Image accentImage = accent.AddComponent<Image>();
-            accentImage.color = new Color32(123, 217, 171, 255);
-            accentImage.raycastTarget = false;
-
-            GameObject spinner = CreateUiObject("Loading Spinner", panel.transform);
+            GameObject spinner = CreateUiObject("Loading Spinner", loadingIndicator.transform);
             loadingSpinnerRect = spinner.GetComponent<RectTransform>();
             loadingSpinnerRect.anchorMin = new Vector2(0.5f, 0.5f);
             loadingSpinnerRect.anchorMax = new Vector2(0.5f, 0.5f);
             loadingSpinnerRect.pivot = new Vector2(0.5f, 0.5f);
-            loadingSpinnerRect.anchoredPosition = new Vector2(-119f, 0f);
-            loadingSpinnerRect.sizeDelta = new Vector2(44f, 44f);
+            loadingSpinnerRect.anchoredPosition = Vector2.zero;
+            loadingSpinnerRect.sizeDelta = new Vector2(22f, 22f);
             CreateLoadingSpinnerDots(spinner.transform);
 
-            Text title = AddText(panel.transform, "处理中", 12, FontStyle.Bold, new Color32(123, 217, 171, 255));
-            RectTransform titleRect = title.GetComponent<RectTransform>();
-            titleRect.anchorMin = new Vector2(0f, 0.5f);
-            titleRect.anchorMax = new Vector2(1f, 1f);
-            titleRect.offsetMin = new Vector2(62f, 0f);
-            titleRect.offsetMax = new Vector2(-16f, -18f);
-            title.alignment = TextAnchor.LowerLeft;
-            title.raycastTarget = false;
-
-            loadingTaskText = AddText(panel.transform, string.Empty, 14, FontStyle.Bold, new Color32(239, 243, 248, 255));
-            RectTransform taskRect = loadingTaskText.GetComponent<RectTransform>();
-            taskRect.anchorMin = new Vector2(0f, 0f);
-            taskRect.anchorMax = new Vector2(1f, 0.5f);
-            taskRect.offsetMin = new Vector2(62f, 18f);
-            taskRect.offsetMax = new Vector2(-16f, 0f);
-            loadingTaskText.alignment = TextAnchor.UpperLeft;
-            loadingTaskText.verticalOverflow = VerticalWrapMode.Truncate;
-            loadingTaskText.resizeTextForBestFit = true;
-            loadingTaskText.resizeTextMinSize = 10;
-            loadingTaskText.resizeTextMaxSize = 14;
-            loadingTaskText.raycastTarget = false;
-
-            loadingOverlay.SetActive(false);
+            loadingIndicator.SetActive(false);
         }
 
         private void CreateLoadingSpinnerDots(Transform parent)
         {
             const int dotCount = 8;
-            const float radius = 17f;
+            const float radius = 8f;
             for (int i = 0; i < dotCount; i++)
             {
                 float angle = (Mathf.PI * 2f * i) / dotCount;
@@ -675,7 +639,7 @@ namespace TestFXTrade.Fx.UI
                 dotRect.anchorMax = new Vector2(0.5f, 0.5f);
                 dotRect.pivot = new Vector2(0.5f, 0.5f);
                 dotRect.anchoredPosition = new Vector2(Mathf.Sin(angle), Mathf.Cos(angle)) * radius;
-                dotRect.sizeDelta = new Vector2(5f, 8f);
+                dotRect.sizeDelta = new Vector2(3f, 5f);
                 dotRect.localRotation = Quaternion.Euler(0f, 0f, -angle * Mathf.Rad2Deg);
 
                 Image dotImage = dot.AddComponent<Image>();
@@ -695,30 +659,16 @@ namespace TestFXTrade.Fx.UI
                 return;
             }
 
-            if (EventSystem.current != null)
+            if (loadingIndicator != null)
             {
-                EventSystem.current.SetSelectedGameObject(null);
-            }
-
-            if (contentCanvasGroup != null)
-            {
-                contentCanvasGroup.interactable = false;
-                contentCanvasGroup.blocksRaycasts = false;
-            }
-
-            if (loadingOverlay != null)
-            {
-                loadingOverlay.SetActive(true);
-                loadingOverlay.transform.SetAsLastSibling();
+                loadingIndicator.SetActive(true);
+                loadingIndicator.transform.SetAsLastSibling();
             }
         }
 
         private void SetLoadingTask(string task)
         {
-            if (loadingTaskText != null)
-            {
-                loadingTaskText.text = string.IsNullOrWhiteSpace(task) ? "正在处理请求" : task;
-            }
+            SetStatus(string.IsNullOrWhiteSpace(task) ? "正在处理请求" : task);
         }
 
         private void EndLoading()
@@ -729,15 +679,9 @@ namespace TestFXTrade.Fx.UI
                 return;
             }
 
-            if (loadingOverlay != null)
+            if (loadingIndicator != null)
             {
-                loadingOverlay.SetActive(false);
-            }
-
-            if (contentCanvasGroup != null)
-            {
-                contentCanvasGroup.interactable = true;
-                contentCanvasGroup.blocksRaycasts = true;
+                loadingIndicator.SetActive(false);
             }
         }
 
@@ -768,7 +712,7 @@ namespace TestFXTrade.Fx.UI
             netPositionLots = 0d;
 
             if (principalInput == null ||
-                !double.TryParse(principalInput.text, NumberStyles.Float, CultureInfo.InvariantCulture, out principalJpy) ||
+                !double.TryParse(principalInput.text, UserNumberStyles, CultureInfo.InvariantCulture, out principalJpy) ||
                 double.IsNaN(principalJpy) ||
                 double.IsInfinity(principalJpy) ||
                 principalJpy <= 0d)
@@ -779,15 +723,16 @@ namespace TestFXTrade.Fx.UI
             }
 
             if (netPositionInput == null ||
-                !double.TryParse(netPositionInput.text, NumberStyles.Float, CultureInfo.InvariantCulture, out netPositionLots) ||
+                !double.TryParse(netPositionInput.text, UserNumberStyles, CultureInfo.InvariantCulture, out netPositionLots) ||
                 double.IsNaN(netPositionLots) ||
                 double.IsInfinity(netPositionLots))
             {
                 SetStatus("输入内容有误。");
-                SetWarning("净持仓必须是数字：正数为多头，负数为空头，0为空仓。");
+                SetWarning("净建玉数量必须是数字：正数为多头，负数为空头，0为空仓。单位为通貨。");
                 return false;
             }
 
+            netPositionLots = CurrencyUnitsToStandardLots(netPositionLots);
             return true;
         }
 
@@ -857,8 +802,8 @@ namespace TestFXTrade.Fx.UI
             if (adjusted)
             {
                 advice.risk_warning = string.IsNullOrWhiteSpace(advice.risk_warning)
-                    ? "建议方向或手数已由本地保证金保护规则调整。"
-                    : advice.risk_warning + " 本地保证金保护规则已调整建议方向或手数。";
+                    ? "建议方向或建玉数量已由本地保证金保护规则调整。"
+                    : advice.risk_warning + " 本地保证金保护规则已调整建议方向或建玉数量。";
             }
 
             return adjusted;
@@ -907,16 +852,16 @@ namespace TestFXTrade.Fx.UI
             double marginUsagePercent = principalJpy > 0d ? (postTradeMargin / principalJpy) * 100d : 0d;
             string modeLabel = mode == AiTradeAdviceMode.ForcedDirectional ? "积极建议" : "稳健建议";
             StringBuilder adviceText = new StringBuilder();
-            adviceText.AppendLine($"{modeLabel}：{actionLabel} {advice.suggested_lots:0.###} lot   置信度 {advice.confidence:P0}");
-            adviceText.AppendLine(advice.summary);
-            adviceText.Append($"依据：{advice.reasoning}");
+            adviceText.AppendLine($"{modeLabel}：{actionLabel} 建玉数量 {FormatQuantityFromLots(advice.suggested_lots)}   置信度 {advice.confidence:P0}");
+            adviceText.AppendLine(NormalizeVisibleAdviceText(advice.summary));
+            adviceText.Append($"依据：{NormalizeVisibleAdviceText(advice.reasoning)}");
             recommendationText.text = adviceText.ToString();
 
-            string adjustedText = adjusted ? " 已执行本地手数保护。" : string.Empty;
+            string adjustedText = adjusted ? " 已执行本地建玉数量保护。" : string.Empty;
             string forcedDirectionWarning = mode == AiTradeAdviceMode.ForcedDirectional
                 ? " 积极模式会强制选择方向，不代表信号充分。"
                 : string.Empty;
-            SetWarning($"{advice.risk_warning} 预计交易后保证金占本金 {marginUsagePercent:0.0}%。{adjustedText}{forcedDirectionWarning} AI建议仅供参考，不构成投资建议。");
+            SetWarning($"{NormalizeVisibleAdviceText(advice.risk_warning)} 预计交易后净建玉数量 {FormatQuantityFromLots(postTradeNetLots)}，保证金占本金 {marginUsagePercent:0.0}%。{adjustedText}{forcedDirectionWarning} AI建议仅供参考，不构成投资建议。");
         }
 
         private void RenderSbiRuleState()
@@ -934,8 +879,8 @@ namespace TestFXTrade.Fx.UI
 
             sbiRulesText.text =
                 $"SBI规则：{sbiRules.Leverage}倍 / {sbiRules.MarginRatePercent:0.##}% / " +
-                $"每1万通货 {sbiRules.RequiredMarginPer10000Jpy:N0} JPY / " +
-                $"适用 {sbiRules.ApplicableDate} / 最小 {sbiRules.MinimumOrderUnits:N0} 通货";
+                $"每1万通貨 {sbiRules.RequiredMarginPer10000Jpy:N0} JPY / " +
+                $"适用 {sbiRules.ApplicableDate} / 最小 {sbiRules.MinimumOrderUnits:N0} 通貨";
         }
 
         private CancellationToken GetMarketDataToken()
@@ -1023,9 +968,52 @@ namespace TestFXTrade.Fx.UI
             advisoryCancellation = null;
         }
 
-        private double ParseInput(InputField input, double fallback)
+        private static double CurrencyUnitsToStandardLots(double quantity)
         {
-            if (input == null || !double.TryParse(input.text, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
+            return quantity / FxConstants.StandardLotBaseUnits;
+        }
+
+        private static double StandardLotsToCurrencyUnits(double lots)
+        {
+            return lots * FxConstants.StandardLotBaseUnits;
+        }
+
+        private static string FormatQuantityFromLots(double lots)
+        {
+            return $"{FormatBaseCurrencyUnits(StandardLotsToCurrencyUnits(lots))} 通貨";
+        }
+
+        private static string FormatBaseCurrencyUnits(double quantity)
+        {
+            double rounded = Math.Round(quantity, 0, MidpointRounding.AwayFromZero);
+            return rounded.ToString("N0", CultureInfo.InvariantCulture);
+        }
+
+        private static string NormalizeVisibleAdviceText(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            string normalized = VisibleLotQuantityPattern.Replace(value, match =>
+            {
+                string rawValue = match.Groups["value"].Value;
+                if (!double.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out double lots))
+                {
+                    return match.Value;
+                }
+
+                return $"建玉数量 {FormatQuantityFromLots(lots)}";
+            });
+
+            return VisibleLotWordPattern.Replace(normalized, "建玉数量")
+                .Replace("手数", "建玉数量");
+        }
+
+        private double ParseInput(TMP_InputField input, double fallback)
+        {
+            if (input == null || !double.TryParse(input.text, UserNumberStyles, CultureInfo.InvariantCulture, out double value))
             {
                 return fallback;
             }
@@ -1137,30 +1125,30 @@ namespace TestFXTrade.Fx.UI
             return uiObject;
         }
 
-        private Text AddHeader(Transform parent, string text)
+        private TMP_Text AddHeader(Transform parent, string text)
         {
-            Text label = AddText(parent, text, 22, FontStyle.Bold, new Color32(244, 247, 251, 255));
+            TMP_Text label = AddText(parent, text, 22, FontStyles.Bold, new Color32(244, 247, 251, 255));
             LayoutElement layout = label.gameObject.AddComponent<LayoutElement>();
             layout.minHeight = 32;
             layout.preferredHeight = 32;
             return label;
         }
 
-        private Text AddQuoteText(Transform parent, string text)
+        private TMP_Text AddQuoteText(Transform parent, string text)
         {
-            Text label = AddText(parent, text, 15, FontStyle.Bold, new Color32(244, 247, 251, 255));
-            label.alignment = TextAnchor.UpperLeft;
-            label.verticalOverflow = VerticalWrapMode.Truncate;
-            label.resizeTextForBestFit = true;
-            label.resizeTextMinSize = 10;
-            label.resizeTextMaxSize = 15;
+            TMP_Text label = AddText(parent, text, 15, FontStyles.Bold, new Color32(244, 247, 251, 255));
+            label.alignment = TextAlignmentOptions.TopLeft;
+            label.overflowMode = TextOverflowModes.Ellipsis;
+            label.enableAutoSizing = true;
+            label.fontSizeMin = 10;
+            label.fontSizeMax = 15;
             LayoutElement layout = label.gameObject.AddComponent<LayoutElement>();
             layout.minHeight = 36;
             layout.preferredHeight = 36;
             return label;
         }
 
-        private Text AddValueRow(Transform parent, string label, string value)
+        private TMP_Text AddValueRow(Transform parent, string label, string value)
         {
             GameObject field = CreateCompactField(parent, label);
             AddCompactFieldLabel(field.transform, label);
@@ -1168,8 +1156,8 @@ namespace TestFXTrade.Fx.UI
             GameObject valueObject = CreateUiObject(label + " Value", field.transform);
             Image valueBackground = valueObject.AddComponent<Image>();
             valueBackground.color = new Color32(14, 16, 19, 255);
-            Text valueText = AddText(valueObject.transform, value, 12, FontStyle.Bold, new Color32(238, 242, 247, 255));
-            valueText.alignment = TextAnchor.MiddleCenter;
+            TMP_Text valueText = AddText(valueObject.transform, value, 12, FontStyles.Bold, new Color32(238, 242, 247, 255));
+            valueText.alignment = TextAlignmentOptions.Center;
             Stretch(valueText.GetComponent<RectTransform>());
             LayoutElement valueLayout = valueObject.AddComponent<LayoutElement>();
             valueLayout.minHeight = 32;
@@ -1177,36 +1165,36 @@ namespace TestFXTrade.Fx.UI
             return valueText;
         }
 
-        private Text AddSectionTitle(Transform parent, string text)
+        private TMP_Text AddSectionTitle(Transform parent, string text)
         {
-            Text label = AddText(parent, text, 13, FontStyle.Bold, new Color32(123, 217, 171, 255));
+            TMP_Text label = AddText(parent, text, 13, FontStyles.Bold, new Color32(123, 217, 171, 255));
             LayoutElement layout = label.gameObject.AddComponent<LayoutElement>();
             layout.minHeight = 18;
             layout.preferredHeight = 18;
             return label;
         }
 
-        private Text AddCompactInfoText(Transform parent, string text)
+        private TMP_Text AddCompactInfoText(Transform parent, string text)
         {
-            Text label = AddText(parent, text, 11, FontStyle.Normal, new Color32(170, 178, 190, 255));
-            label.verticalOverflow = VerticalWrapMode.Truncate;
-            label.resizeTextForBestFit = true;
-            label.resizeTextMinSize = 8;
-            label.resizeTextMaxSize = 11;
+            TMP_Text label = AddText(parent, text, 11, FontStyles.Normal, new Color32(170, 178, 190, 255));
+            label.overflowMode = TextOverflowModes.Ellipsis;
+            label.enableAutoSizing = true;
+            label.fontSizeMin = 8;
+            label.fontSizeMax = 11;
             LayoutElement layout = label.gameObject.AddComponent<LayoutElement>();
             layout.minHeight = 18;
             layout.preferredHeight = 18;
             return label;
         }
 
-        private Text AddBodyText(Transform parent, string text)
+        private TMP_Text AddBodyText(Transform parent, string text)
         {
-            Text label = AddText(parent, text, 12, FontStyle.Normal, new Color32(211, 218, 228, 255));
-            label.alignment = TextAnchor.UpperLeft;
-            label.verticalOverflow = VerticalWrapMode.Truncate;
-            label.resizeTextForBestFit = true;
-            label.resizeTextMinSize = 8;
-            label.resizeTextMaxSize = 12;
+            TMP_Text label = AddText(parent, text, 12, FontStyles.Normal, new Color32(211, 218, 228, 255));
+            label.alignment = TextAlignmentOptions.TopLeft;
+            label.overflowMode = TextOverflowModes.Ellipsis;
+            label.enableAutoSizing = true;
+            label.fontSizeMin = 8;
+            label.fontSizeMax = 12;
             LayoutElement layout = label.gameObject.AddComponent<LayoutElement>();
             layout.minHeight = 42;
             layout.preferredHeight = 42;
@@ -1264,81 +1252,116 @@ namespace TestFXTrade.Fx.UI
             return field;
         }
 
-        private Text AddCompactFieldLabel(Transform parent, string label)
+        private TMP_Text AddCompactFieldLabel(Transform parent, string label)
         {
-            Text labelText = AddText(parent, label, 10, FontStyle.Normal, new Color32(207, 214, 224, 255));
-            labelText.verticalOverflow = VerticalWrapMode.Truncate;
-            labelText.resizeTextForBestFit = true;
-            labelText.resizeTextMinSize = 8;
-            labelText.resizeTextMaxSize = 10;
+            TMP_Text labelText = AddText(parent, label, 10, FontStyles.Normal, new Color32(207, 214, 224, 255));
+            labelText.overflowMode = TextOverflowModes.Ellipsis;
+            labelText.enableAutoSizing = true;
+            labelText.fontSizeMin = 8;
+            labelText.fontSizeMax = 10;
             LayoutElement labelLayout = labelText.gameObject.AddComponent<LayoutElement>();
             labelLayout.minHeight = 15;
             labelLayout.preferredHeight = 15;
             return labelText;
         }
 
-        private static Font CreateChineseUiFont()
+        private static TMP_FontAsset CreateChineseUiFont()
         {
-            for (int i = 0; i < ChineseFontNames.Length; i++)
+            for (int i = 0; i < ChineseSystemFontCandidates.GetLength(0); i++)
             {
-                Font candidate = Font.CreateDynamicFontFromOSFont(ChineseFontNames[i], DynamicFontSize);
+                string familyName = ChineseSystemFontCandidates[i, 0];
+                string styleName = ChineseSystemFontCandidates[i, 1];
+                TMP_FontAsset candidate = TMP_FontAsset.CreateFontAsset(familyName, styleName, DynamicFontSize);
                 if (CanRenderChinese(candidate))
                 {
+                    candidate.name = string.IsNullOrEmpty(styleName)
+                        ? $"{familyName} Dynamic TMP"
+                        : $"{familyName} {styleName} Dynamic TMP";
                     return candidate;
                 }
+
+                DestroyRuntimeFontAsset(candidate);
             }
 
-            Font combinedCandidate = Font.CreateDynamicFontFromOSFont(ChineseFontNames, DynamicFontSize);
-            if (CanRenderChinese(combinedCandidate))
+            TMP_Settings settings = TMP_Settings.LoadDefaultSettings();
+            TMP_FontAsset defaultFont = settings == null ? null : TMP_Settings.defaultFontAsset;
+            if (CanRenderChinese(defaultFont))
             {
-                return combinedCandidate;
+                return defaultFont;
             }
 
             Font legacyFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (legacyFont != null)
-            {
-                return legacyFont;
-            }
-
-            return Resources.GetBuiltinResource<Font>("Arial.ttf");
+            return legacyFont == null ? null : TMP_FontAsset.CreateFontAsset(legacyFont);
         }
 
-        private static bool CanRenderChinese(Font candidate)
+        private static void DestroyRuntimeFontAsset(TMP_FontAsset fontAsset)
+        {
+            if (fontAsset == null)
+            {
+                return;
+            }
+
+            if (fontAsset.material != null)
+            {
+                DestroyRuntimeObject(fontAsset.material);
+            }
+
+            Texture2D[] atlasTextures = fontAsset.atlasTextures;
+            for (int i = 0; i < atlasTextures.Length; i++)
+            {
+                if (atlasTextures[i] != null)
+                {
+                    DestroyRuntimeObject(atlasTextures[i]);
+                }
+            }
+
+            DestroyRuntimeObject(fontAsset);
+        }
+
+        private static void DestroyRuntimeObject(UnityEngine.Object target)
+        {
+            if (Application.isPlaying)
+            {
+                Destroy(target);
+                return;
+            }
+
+            DestroyImmediate(target);
+        }
+
+        private static bool CanRenderChinese(TMP_FontAsset candidate)
         {
             if (candidate == null)
             {
                 return false;
             }
 
-            candidate.RequestCharactersInTexture(ChineseFontProbeText, DynamicFontSize, FontStyle.Normal);
-            for (int i = 0; i < ChineseFontProbeText.Length; i++)
-            {
-                if (!candidate.HasCharacter(ChineseFontProbeText[i]))
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            return candidate.TryAddCharacters(ChineseFontProbeText, out string missingCharacters, true) &&
+                   string.IsNullOrEmpty(missingCharacters);
         }
 
-        private Text AddText(Transform parent, string value, int size, FontStyle style, Color32 color)
+        private TMP_Text AddText(Transform parent, string value, int size, FontStyles style, Color32 color)
         {
             GameObject textObject = CreateUiObject("Text", parent);
-            Text text = textObject.AddComponent<Text>();
+            TextMeshProUGUI text = textObject.AddComponent<TextMeshProUGUI>();
             text.font = font;
             text.text = value;
             text.fontSize = size;
             text.fontStyle = style;
             text.color = color;
-            text.alignment = TextAnchor.MiddleLeft;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
-            text.lineSpacing = CjkLineSpacing;
+            text.alignment = TextAlignmentOptions.MidlineLeft;
+            text.textWrappingMode = TextWrappingModes.Normal;
+            text.overflowMode = TextOverflowModes.Overflow;
+            text.raycastTarget = false;
             return text;
         }
 
-        private InputField AddInput(Transform parent, string label, string defaultValue, bool password = false)
+        private TMP_InputField AddInput(
+            Transform parent,
+            string label,
+            string defaultValue,
+            bool password = false,
+            TMP_InputField.ContentType contentType = TMP_InputField.ContentType.DecimalNumber)
         {
             GameObject field = CreateCompactField(parent, label);
             AddCompactFieldLabel(field.transform, label);
@@ -1346,14 +1369,16 @@ namespace TestFXTrade.Fx.UI
             GameObject inputObject = CreateUiObject(label + " Input", field.transform);
             Image inputBackground = inputObject.AddComponent<Image>();
             inputBackground.color = new Color32(14, 16, 19, 255);
-            Text inputText = CreateInputText(inputObject.transform, defaultValue);
+            TMP_Text inputText = CreateInputText(inputObject.transform, defaultValue);
 
-            InputField input = inputObject.AddComponent<InputField>();
+            TMP_InputField input = inputObject.AddComponent<TMP_InputField>();
             input.targetGraphic = inputBackground;
             input.textComponent = inputText;
+            input.textViewport = inputText.rectTransform;
             input.placeholder = null;
-            input.contentType = password ? InputField.ContentType.Password : InputField.ContentType.DecimalNumber;
-            input.lineType = InputField.LineType.SingleLine;
+            input.contentType = password ? TMP_InputField.ContentType.Password : contentType;
+            input.keyboardType = TouchScreenKeyboardType.NumbersAndPunctuation;
+            input.lineType = TMP_InputField.LineType.SingleLine;
             input.SetTextWithoutNotify(defaultValue);
 
             LayoutElement inputLayout = inputObject.AddComponent<LayoutElement>();
@@ -1363,7 +1388,7 @@ namespace TestFXTrade.Fx.UI
             return input;
         }
 
-        private Text CreateInputText(Transform parent, string value)
+        private TMP_Text CreateInputText(Transform parent, string value)
         {
             GameObject textObject = CreateUiObject("Input Text", parent);
             RectTransform rect = textObject.GetComponent<RectTransform>();
@@ -1372,17 +1397,19 @@ namespace TestFXTrade.Fx.UI
             rect.offsetMin = new Vector2(6, 2);
             rect.offsetMax = new Vector2(-6, -2);
 
-            Text text = textObject.AddComponent<Text>();
+            TextMeshProUGUI text = textObject.AddComponent<TextMeshProUGUI>();
             text.font = font;
             text.fontSize = 12;
             text.color = new Color32(238, 242, 247, 255);
             text.text = value;
-            text.alignment = TextAnchor.MiddleLeft;
+            text.alignment = TextAlignmentOptions.MidlineLeft;
+            text.textWrappingMode = TextWrappingModes.NoWrap;
+            text.overflowMode = TextOverflowModes.Ellipsis;
             text.raycastTarget = false;
             return text;
         }
 
-        private Dropdown AddDropdown(Transform parent, string label, List<string> options, int value)
+        private TMP_Dropdown AddDropdown(Transform parent, string label, List<string> options, int value)
         {
             GameObject field = CreateCompactField(parent, label);
             AddCompactFieldLabel(field.transform, label);
@@ -1390,11 +1417,11 @@ namespace TestFXTrade.Fx.UI
             GameObject dropdownObject = CreateUiObject(label + " Dropdown", field.transform);
             Image background = dropdownObject.AddComponent<Image>();
             background.color = new Color32(14, 16, 19, 255);
-            Dropdown dropdown = dropdownObject.AddComponent<Dropdown>();
+            TMP_Dropdown dropdown = dropdownObject.AddComponent<TMP_Dropdown>();
             dropdown.targetGraphic = background;
-            dropdown.options = options.ConvertAll(option => new Dropdown.OptionData(option));
+            dropdown.options = options.ConvertAll(option => new TMP_Dropdown.OptionData(option));
             dropdown.value = value;
-            dropdown.captionText = AddText(dropdownObject.transform, options[value], 12, FontStyle.Normal, new Color32(238, 242, 247, 255));
+            dropdown.captionText = AddText(dropdownObject.transform, options[value], 12, FontStyles.Normal, new Color32(238, 242, 247, 255));
             RectTransform captionRect = dropdown.captionText.GetComponent<RectTransform>();
             captionRect.anchorMin = Vector2.zero;
             captionRect.anchorMax = Vector2.one;
@@ -1409,7 +1436,7 @@ namespace TestFXTrade.Fx.UI
             return dropdown;
         }
 
-        private void CreateDropdownTemplate(Dropdown dropdown, Transform parent)
+        private void CreateDropdownTemplate(TMP_Dropdown dropdown, Transform parent)
         {
             GameObject template = CreateUiObject("Template", parent);
             template.SetActive(false);
@@ -1459,7 +1486,7 @@ namespace TestFXTrade.Fx.UI
             Toggle itemToggle = item.AddComponent<Toggle>();
             itemToggle.targetGraphic = itemBackground;
 
-            Text itemText = AddText(item.transform, "选项", 12, FontStyle.Normal, new Color32(238, 242, 247, 255));
+            TMP_Text itemText = AddText(item.transform, "选项", 12, FontStyles.Normal, new Color32(238, 242, 247, 255));
             RectTransform itemTextRect = itemText.GetComponent<RectTransform>();
             itemTextRect.anchorMin = Vector2.zero;
             itemTextRect.anchorMax = Vector2.one;
@@ -1510,8 +1537,8 @@ namespace TestFXTrade.Fx.UI
             background.color = new Color32(55, 132, 93, 255);
             Button button = buttonObject.AddComponent<Button>();
             button.targetGraphic = background;
-            Text text = AddText(buttonObject.transform, string.IsNullOrWhiteSpace(buttonText) ? label : buttonText, 11, FontStyle.Bold, Color.white);
-            text.alignment = TextAnchor.MiddleCenter;
+            TMP_Text text = AddText(buttonObject.transform, string.IsNullOrWhiteSpace(buttonText) ? label : buttonText, 11, FontStyles.Bold, Color.white);
+            text.alignment = TextAlignmentOptions.Center;
             RectTransform textRect = text.GetComponent<RectTransform>();
             Stretch(textRect);
 

@@ -100,10 +100,16 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 rules);
 
             Assert.That(prompt, Does.Contain("principal_jpy=1000000"));
+            Assert.That(prompt, Does.Contain("net_position_quantity=-25000"));
             Assert.That(prompt, Does.Contain("net_position_lots=-0.25"));
             Assert.That(prompt, Does.Contain("required_margin_per_10,000_currency=64982 JPY"));
             Assert.That(prompt, Does.Contain("required_margin_per_1_standard_lot=649820 JPY"));
+            Assert.That(prompt, Does.Contain("maximum_buy_order_quantity"));
             Assert.That(prompt, Does.Not.Contain("OPENAI_API_KEY"));
+
+            string instructions = OpenAiTradePromptBuilder.GetInstructions(AiTradeAdviceMode.Conservative);
+            Assert.That(instructions, Does.Contain("建玉数量"));
+            Assert.That(instructions, Does.Contain("not as lot"));
         }
 
         [Test]

@@ -17,6 +17,8 @@ test("forced directional schema excludes HOLD", () => {
   assert.equal(request.store, false);
   assert.deepEqual(request.text.format.schema.properties.action.enum, ["BUY", "SELL"]);
   assert.match(request.instructions, /never HOLD/);
+  assert.match(request.instructions, /建玉数量/);
+  assert.match(request.instructions, /not as lot/);
 });
 
 test("OpenAI structured output is normalized for the client", () => {

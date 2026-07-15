@@ -15,8 +15,9 @@ namespace TestFXTrade.Fx.OpenAI
         private const string CommonInstructions =
             "You are a USD/JPY decision-support assistant. Return only the requested JSON schema. " +
             "Answer all natural-language fields in Simplified Chinese. Treat the SBI FX rule snapshot as a hard margin constraint, " +
-            "not as a guarantee that a trade is safe. suggested_lots is the size of the next order, where 1 lot equals " +
-            "100,000 base-currency units. Never invent missing facts or prices. Respect the mode-specific margin limit. " +
+            "not as a guarantee that a trade is safe. The JSON field suggested_lots remains the internal next-order size in " +
+            "standard lots, where 1 standard lot equals 100,000 base-currency units. In summary, reasoning, and risk_warning, " +
+            "describe size as 建玉数量 in base-currency units (通貨), not as lot or 手数. Never invent missing facts or prices. Respect the mode-specific margin limit. " +
             "Explicitly mention uncertainty and that the result is informational, not personalized investment advice. " +
             "Keep summary within 30 Chinese characters, reasoning within 90, and risk_warning within 60.";
 
@@ -75,7 +76,7 @@ namespace TestFXTrade.Fx.OpenAI
 
             if (double.IsNaN(netPositionLots) || double.IsInfinity(netPositionLots))
             {
-                throw new ArgumentOutOfRangeException(nameof(netPositionLots), "净持仓必须是有限数值。");
+                throw new ArgumentOutOfRangeException(nameof(netPositionLots), "净建玉数量必须是有限数值。");
             }
 
             if (quote == null || quote.Price <= 0d)
@@ -95,6 +96,10 @@ namespace TestFXTrade.Fx.OpenAI
             double grossLotLimit = marginPerLot > 0d ? (principalJpy * marginLimitRatio) / marginPerLot : 0d;
             double maximumBuyOrderLots = Math.Max(0d, grossLotLimit - netPositionLots);
             double maximumSellOrderLots = Math.Max(0d, grossLotLimit + netPositionLots);
+            double netPositionQuantity = netPositionLots * FxConstants.StandardLotBaseUnits;
+            double grossPositionLimitQuantity = grossLotLimit * FxConstants.StandardLotBaseUnits;
+            double maximumBuyOrderQuantity = maximumBuyOrderLots * FxConstants.StandardLotBaseUnits;
+            double maximumSellOrderQuantity = maximumSellOrderLots * FxConstants.StandardLotBaseUnits;
             int marginLimitPercent = (int)Math.Round(marginLimitRatio * 100d);
             string modeLabel = mode == AiTradeAdviceMode.ForcedDirectional ? "forced_directional" : "conservative";
 
@@ -104,13 +109,17 @@ namespace TestFXTrade.Fx.OpenAI
             prompt.AppendLine();
             prompt.AppendLine("USER INPUTS");
             prompt.AppendLine(FormattableString.Invariant($"principal_jpy={principalJpy:0.##}"));
-            prompt.AppendLine(FormattableString.Invariant($"net_position_lots={netPositionLots:0.###} (positive=long, negative=short, zero=flat)"));
+            prompt.AppendLine(FormattableString.Invariant($"net_position_quantity={netPositionQuantity:0.##} base_currency_units (positive=long, negative=short, zero=flat)"));
+            prompt.AppendLine(FormattableString.Invariant($"net_position_lots={netPositionLots:0.###} (internal schema value; do not mention lots in natural-language fields)"));
             prompt.AppendLine();
             prompt.AppendLine("SBI FX RULES (downloaded locally from the official source)");
             prompt.AppendLine(rules.ToPromptText());
             prompt.AppendLine(FormattableString.Invariant($"required_margin_per_1_standard_lot={marginPerLot:0.##} JPY"));
             prompt.AppendLine(FormattableString.Invariant($"current_estimated_margin={currentEstimatedMargin:0.##} JPY"));
             prompt.AppendLine(FormattableString.Invariant($"margin_usage_limit_percent={marginLimitPercent}"));
+            prompt.AppendLine(FormattableString.Invariant($"gross_position_limit_quantity={grossPositionLimitQuantity:0.##} base_currency_units"));
+            prompt.AppendLine(FormattableString.Invariant($"maximum_buy_order_quantity={maximumBuyOrderQuantity:0.##} base_currency_units"));
+            prompt.AppendLine(FormattableString.Invariant($"maximum_sell_order_quantity={maximumSellOrderQuantity:0.##} base_currency_units"));
             prompt.AppendLine(FormattableString.Invariant($"gross_position_limit={grossLotLimit:0.###} lots"));
             prompt.AppendLine(FormattableString.Invariant($"maximum_buy_order={maximumBuyOrderLots:0.###} lots"));
             prompt.AppendLine(FormattableString.Invariant($"maximum_sell_order={maximumSellOrderLots:0.###} lots"));

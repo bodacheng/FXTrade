@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using TestFXTrade.Fx.Domain;
 
 namespace TestFXTrade.Fx.Analysis
@@ -46,8 +47,8 @@ namespace TestFXTrade.Fx.Analysis
             if (result.MaxSafeGrossLots < FxConstants.MinTradableLot)
             {
                 result.Action = RecommendationAction.Hold;
-                result.Summary = "观望：风险或保证金预算低于最小可交易 lot。";
-                result.Warnings.Add("安全可交易量低于 0.01 lot。");
+                result.Summary = "观望：风险或保证金预算低于最小可交易建玉数量。";
+                result.Warnings.Add($"安全可交易建玉数量低于 {FormatQuantityFromLots(FxConstants.MinTradableLot)}。");
                 return result;
             }
 
@@ -76,7 +77,7 @@ namespace TestFXTrade.Fx.Analysis
             {
                 result.Action = RecommendationAction.Hold;
                 result.Summary = "观望：当前净头寸已接近计算目标。";
-                result.Reasons.Add($"目标净头寸为 {result.TargetNetLots:0.00} lots。");
+                result.Reasons.Add($"目标净建玉数量为 {FormatQuantityFromLots(result.TargetNetLots)}。");
                 return result;
             }
 
@@ -85,18 +86,18 @@ namespace TestFXTrade.Fx.Analysis
                 result.Action = RecommendationAction.Buy;
                 result.SuggestedBuyLots = RoundLot(delta);
                 result.RequiredMarginForSuggestion = result.SuggestedBuyLots * result.MarginPerLotAccountCurrency;
-                result.Summary = $"建议买入最多 {result.SuggestedBuyLots:0.00} lots USD/JPY。";
+                result.Summary = $"建议买入最多建玉数量 {FormatQuantityFromLots(result.SuggestedBuyLots)} USD/JPY。";
             }
             else
             {
                 result.Action = RecommendationAction.Sell;
                 result.SuggestedSellLots = RoundLot(Math.Abs(delta));
                 result.RequiredMarginForSuggestion = result.SuggestedSellLots * result.MarginPerLotAccountCurrency;
-                result.Summary = $"建议卖出或减少 {result.SuggestedSellLots:0.00} lots USD/JPY 净多头。";
+                result.Summary = $"建议卖出或减少建玉数量 {FormatQuantityFromLots(result.SuggestedSellLots)} USD/JPY 净多头。";
             }
 
             result.Reasons.Add($"趋势评分为 {result.TrendScore:0.00}，依据 EMA、RSI、ATR、动量与斜率计算。");
-            result.Reasons.Add($"风险上限允许止损侧 {safeLotsByStop:0.00} lots、保证金侧 {safeLotsByMargin:0.00} lots。");
+            result.Reasons.Add($"风险上限允许止损侧 {FormatQuantityFromLots(safeLotsByStop)}、保证金侧 {FormatQuantityFromLots(safeLotsByMargin)}。");
             result.Reasons.Add($"计划止损为 {risk.PlannedStopLossPips:0.#} pips，ATR 为 {atrPips:0.#} pips。");
             return result;
         }
@@ -165,6 +166,12 @@ namespace TestFXTrade.Fx.Analysis
         private static double RoundLot(double lots)
         {
             return Math.Floor(Math.Max(0d, lots) * 100d) / 100d;
+        }
+
+        private static string FormatQuantityFromLots(double lots)
+        {
+            double quantity = Math.Round(lots * FxConstants.StandardLotBaseUnits, 0, MidpointRounding.AwayFromZero);
+            return quantity.ToString("N0", CultureInfo.InvariantCulture) + " 通貨";
         }
     }
 }

@@ -2,7 +2,8 @@
     "name": "TestFXTrade.EditMode.Tests",
     "rootNamespace": "",
     "references": [
-        "TestFXTrade.Fx"
+        "TestFXTrade.Fx",
+        "Unity.TextMeshPro"
     ],
     "includePlatforms": [
         "Editor"
