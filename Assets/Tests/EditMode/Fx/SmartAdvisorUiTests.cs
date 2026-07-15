@@ -41,6 +41,37 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 Button[] buttons = canvasObject.GetComponentsInChildren<Button>(true);
                 Assert.AreEqual(4, buttons.Length);
 
+                Transform loadingOverlay = canvasObject.transform.Find("Root/Loading Overlay");
+                Assert.NotNull(loadingOverlay);
+                Assert.IsFalse(loadingOverlay.gameObject.activeSelf);
+                Image loadingBackdrop = loadingOverlay.GetComponent<Image>();
+                Assert.NotNull(loadingBackdrop);
+                Assert.IsTrue(loadingBackdrop.raycastTarget);
+                Assert.NotNull(loadingOverlay.Find("Loading Panel/Loading Spinner"));
+
+                CanvasGroup contentCanvasGroup = canvasObject.transform.Find("Root/Safe Area Content").GetComponent<CanvasGroup>();
+                Assert.NotNull(contentCanvasGroup);
+                Assert.IsTrue(contentCanvasGroup.interactable);
+                Assert.IsTrue(contentCanvasGroup.blocksRaycasts);
+
+                MethodInfo beginLoading = typeof(FxTradeAdvisorApp).GetMethod("BeginLoading", BindingFlags.Instance | BindingFlags.NonPublic);
+                MethodInfo endLoading = typeof(FxTradeAdvisorApp).GetMethod("EndLoading", BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.NotNull(beginLoading);
+                Assert.NotNull(endLoading);
+
+                beginLoading.Invoke(app, new object[] { "正在测试加载状态" });
+                beginLoading.Invoke(app, new object[] { "正在测试嵌套任务" });
+                Assert.IsTrue(loadingOverlay.gameObject.activeSelf);
+                Assert.IsFalse(contentCanvasGroup.interactable);
+                Assert.IsFalse(contentCanvasGroup.blocksRaycasts);
+
+                endLoading.Invoke(app, null);
+                Assert.IsTrue(loadingOverlay.gameObject.activeSelf);
+                endLoading.Invoke(app, null);
+                Assert.IsFalse(loadingOverlay.gameObject.activeSelf);
+                Assert.IsTrue(contentCanvasGroup.interactable);
+                Assert.IsTrue(contentCanvasGroup.blocksRaycasts);
+
                 Transform safeArea = canvasObject.transform.Find("Root/Safe Area Content");
                 Assert.NotNull(safeArea);
                 Assert.IsNull(safeArea.GetComponent<ScrollRect>());

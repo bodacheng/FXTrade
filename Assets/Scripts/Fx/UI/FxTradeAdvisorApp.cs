@@ -52,6 +52,10 @@ namespace TestFXTrade.Fx.UI
         private UsdJpyTrendLineGraphic chartGraphic;
         private CanvasScaler canvasScaler;
         private RectTransform safeAreaContentRect;
+        private CanvasGroup contentCanvasGroup;
+        private GameObject loadingOverlay;
+        private Text loadingTaskText;
+        private RectTransform loadingSpinnerRect;
         private Rect lastSafeArea = new Rect(-1f, -1f, -1f, -1f);
         private Vector2Int lastScreenSize = new Vector2Int(-1, -1);
 
@@ -70,6 +74,7 @@ namespace TestFXTrade.Fx.UI
         private bool candleRefreshInFlight;
         private bool sbiSyncInFlight;
         private bool aiAdviceInFlight;
+        private int loadingOperationCount;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Bootstrap()
@@ -129,9 +134,10 @@ namespace TestFXTrade.Fx.UI
 
         private void Update()
         {
+            UpdateLoadingAnimation();
             RefreshAdaptiveLayout();
 
-            if (string.IsNullOrWhiteSpace(relayBaseUrl) || !autoRefreshToggle.isOn)
+            if (loadingOperationCount > 0 || string.IsNullOrWhiteSpace(relayBaseUrl) || !autoRefreshToggle.isOn)
             {
                 return;
             }
@@ -172,6 +178,7 @@ namespace TestFXTrade.Fx.UI
             GameObject content = CreateUiObject("Safe Area Content", root.transform);
             safeAreaContentRect = content.GetComponent<RectTransform>();
             Stretch(safeAreaContentRect);
+            contentCanvasGroup = content.AddComponent<CanvasGroup>();
 
             VerticalLayoutGroup contentGroup = content.AddComponent<VerticalLayoutGroup>();
             contentGroup.padding = new RectOffset(10, 10, 8, 8);
@@ -184,6 +191,7 @@ namespace TestFXTrade.Fx.UI
             BuildMarketControls(content.transform);
             BuildInputColumn(content.transform);
             BuildOutputColumn(content.transform);
+            BuildLoadingOverlay(root.transform);
             RefreshAdaptiveLayout(true);
         }
 
@@ -280,6 +288,7 @@ namespace TestFXTrade.Fx.UI
             CancellationToken token = GetMarketDataToken();
             candleRefreshInFlight = true;
             quoteRefreshInFlight = true;
+            BeginLoading("正在获取 USD/JPY 实时报价与K线");
             nextCandleRefreshAt = Time.time + CandleRefreshSeconds;
             nextQuoteRefreshAt = Time.time + QuoteRefreshSeconds;
 
@@ -324,6 +333,7 @@ namespace TestFXTrade.Fx.UI
             {
                 candleRefreshInFlight = false;
                 quoteRefreshInFlight = false;
+                EndLoading();
             }
         }
 
@@ -341,6 +351,7 @@ namespace TestFXTrade.Fx.UI
 
             CancellationToken token = GetMarketDataToken();
             quoteRefreshInFlight = true;
+            BeginLoading("正在更新 USD/JPY 实时报价");
             nextQuoteRefreshAt = Time.time + QuoteRefreshSeconds;
 
             try
@@ -377,6 +388,7 @@ namespace TestFXTrade.Fx.UI
             finally
             {
                 quoteRefreshInFlight = false;
+                EndLoading();
             }
         }
 
@@ -468,6 +480,7 @@ namespace TestFXTrade.Fx.UI
 
             sbiSyncInFlight = true;
             syncSbiRulesButton.interactable = false;
+            BeginLoading("正在同步 SBI FX 最新规则");
             CancellationToken token = GetAdvisoryToken();
 
             try
@@ -490,6 +503,7 @@ namespace TestFXTrade.Fx.UI
             finally
             {
                 sbiSyncInFlight = false;
+                EndLoading();
                 if (syncSbiRulesButton != null)
                 {
                     syncSbiRulesButton.interactable = true;
@@ -525,6 +539,7 @@ namespace TestFXTrade.Fx.UI
 
             aiAdviceInFlight = true;
             SetAdviceButtonsInteractable(false);
+            BeginLoading("正在更新行情并准备 AI 分析");
             CancellationToken token = GetAdvisoryToken();
 
             try
@@ -557,6 +572,7 @@ namespace TestFXTrade.Fx.UI
                 string modeLabel = mode == AiTradeAdviceMode.ForcedDirectional ? "积极策略" : "稳健策略";
                 recommendationText.text = $"OpenAI正在按{modeLabel}结合实时行情、技术指标和SBI保证金规则进行分析……";
                 SetStatus($"正在通过 Azure 请求 OpenAI（{modeLabel}）……");
+                SetLoadingTask($"正在等待 OpenAI 返回{modeLabel}建议");
                 OpenAiTradeAdvice advice = await openAiClient.GetAdviceAsync(prompt, mode, token);
                 bool adjusted = ApplyLocalMarginGuard(advice, principalJpy, netPositionLots, sbiRules, mode);
                 RenderAiAdvice(advice, principalJpy, netPositionLots, adjusted, mode);
@@ -575,7 +591,159 @@ namespace TestFXTrade.Fx.UI
             finally
             {
                 aiAdviceInFlight = false;
+                EndLoading();
                 SetAdviceButtonsInteractable(true);
+            }
+        }
+
+        private void BuildLoadingOverlay(Transform parent)
+        {
+            loadingOverlay = CreateUiObject("Loading Overlay", parent);
+            RectTransform overlayRect = loadingOverlay.GetComponent<RectTransform>();
+            Stretch(overlayRect);
+
+            Image backdrop = loadingOverlay.AddComponent<Image>();
+            backdrop.color = new Color32(7, 9, 11, 224);
+            backdrop.raycastTarget = true;
+
+            GameObject panel = CreateUiObject("Loading Panel", loadingOverlay.transform);
+            RectTransform panelRect = panel.GetComponent<RectTransform>();
+            panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+            panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+            panelRect.pivot = new Vector2(0.5f, 0.5f);
+            panelRect.sizeDelta = new Vector2(310f, 126f);
+            Image panelImage = panel.AddComponent<Image>();
+            panelImage.color = new Color32(25, 29, 34, 255);
+            panelImage.raycastTarget = false;
+
+            GameObject accent = CreateUiObject("Accent", panel.transform);
+            RectTransform accentRect = accent.GetComponent<RectTransform>();
+            accentRect.anchorMin = new Vector2(0f, 1f);
+            accentRect.anchorMax = new Vector2(1f, 1f);
+            accentRect.pivot = new Vector2(0.5f, 1f);
+            accentRect.sizeDelta = new Vector2(0f, 3f);
+            Image accentImage = accent.AddComponent<Image>();
+            accentImage.color = new Color32(123, 217, 171, 255);
+            accentImage.raycastTarget = false;
+
+            GameObject spinner = CreateUiObject("Loading Spinner", panel.transform);
+            loadingSpinnerRect = spinner.GetComponent<RectTransform>();
+            loadingSpinnerRect.anchorMin = new Vector2(0.5f, 0.5f);
+            loadingSpinnerRect.anchorMax = new Vector2(0.5f, 0.5f);
+            loadingSpinnerRect.pivot = new Vector2(0.5f, 0.5f);
+            loadingSpinnerRect.anchoredPosition = new Vector2(-119f, 0f);
+            loadingSpinnerRect.sizeDelta = new Vector2(44f, 44f);
+            CreateLoadingSpinnerDots(spinner.transform);
+
+            Text title = AddText(panel.transform, "处理中", 12, FontStyle.Bold, new Color32(123, 217, 171, 255));
+            RectTransform titleRect = title.GetComponent<RectTransform>();
+            titleRect.anchorMin = new Vector2(0f, 0.5f);
+            titleRect.anchorMax = new Vector2(1f, 1f);
+            titleRect.offsetMin = new Vector2(62f, 0f);
+            titleRect.offsetMax = new Vector2(-16f, -18f);
+            title.alignment = TextAnchor.LowerLeft;
+            title.raycastTarget = false;
+
+            loadingTaskText = AddText(panel.transform, string.Empty, 14, FontStyle.Bold, new Color32(239, 243, 248, 255));
+            RectTransform taskRect = loadingTaskText.GetComponent<RectTransform>();
+            taskRect.anchorMin = new Vector2(0f, 0f);
+            taskRect.anchorMax = new Vector2(1f, 0.5f);
+            taskRect.offsetMin = new Vector2(62f, 18f);
+            taskRect.offsetMax = new Vector2(-16f, 0f);
+            loadingTaskText.alignment = TextAnchor.UpperLeft;
+            loadingTaskText.verticalOverflow = VerticalWrapMode.Truncate;
+            loadingTaskText.resizeTextForBestFit = true;
+            loadingTaskText.resizeTextMinSize = 10;
+            loadingTaskText.resizeTextMaxSize = 14;
+            loadingTaskText.raycastTarget = false;
+
+            loadingOverlay.SetActive(false);
+        }
+
+        private void CreateLoadingSpinnerDots(Transform parent)
+        {
+            const int dotCount = 8;
+            const float radius = 17f;
+            for (int i = 0; i < dotCount; i++)
+            {
+                float angle = (Mathf.PI * 2f * i) / dotCount;
+                GameObject dot = CreateUiObject($"Dot {i + 1}", parent);
+                RectTransform dotRect = dot.GetComponent<RectTransform>();
+                dotRect.anchorMin = new Vector2(0.5f, 0.5f);
+                dotRect.anchorMax = new Vector2(0.5f, 0.5f);
+                dotRect.pivot = new Vector2(0.5f, 0.5f);
+                dotRect.anchoredPosition = new Vector2(Mathf.Sin(angle), Mathf.Cos(angle)) * radius;
+                dotRect.sizeDelta = new Vector2(5f, 8f);
+                dotRect.localRotation = Quaternion.Euler(0f, 0f, -angle * Mathf.Rad2Deg);
+
+                Image dotImage = dot.AddComponent<Image>();
+                float alpha = Mathf.Lerp(0.28f, 1f, (i + 1f) / dotCount);
+                dotImage.color = new Color(0.48f, 0.85f, 0.67f, alpha);
+                dotImage.raycastTarget = false;
+            }
+        }
+
+        private void BeginLoading(string task)
+        {
+            loadingOperationCount++;
+            SetLoadingTask(task);
+
+            if (loadingOperationCount != 1)
+            {
+                return;
+            }
+
+            if (EventSystem.current != null)
+            {
+                EventSystem.current.SetSelectedGameObject(null);
+            }
+
+            if (contentCanvasGroup != null)
+            {
+                contentCanvasGroup.interactable = false;
+                contentCanvasGroup.blocksRaycasts = false;
+            }
+
+            if (loadingOverlay != null)
+            {
+                loadingOverlay.SetActive(true);
+                loadingOverlay.transform.SetAsLastSibling();
+            }
+        }
+
+        private void SetLoadingTask(string task)
+        {
+            if (loadingTaskText != null)
+            {
+                loadingTaskText.text = string.IsNullOrWhiteSpace(task) ? "正在处理请求" : task;
+            }
+        }
+
+        private void EndLoading()
+        {
+            loadingOperationCount = Mathf.Max(0, loadingOperationCount - 1);
+            if (loadingOperationCount > 0)
+            {
+                return;
+            }
+
+            if (loadingOverlay != null)
+            {
+                loadingOverlay.SetActive(false);
+            }
+
+            if (contentCanvasGroup != null)
+            {
+                contentCanvasGroup.interactable = true;
+                contentCanvasGroup.blocksRaycasts = true;
+            }
+        }
+
+        private void UpdateLoadingAnimation()
+        {
+            if (loadingOperationCount > 0 && loadingSpinnerRect != null)
+            {
+                loadingSpinnerRect.Rotate(0f, 0f, -180f * Time.unscaledDeltaTime);
             }
         }
 

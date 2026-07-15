@@ -2,14 +2,14 @@
 .DS_Store
 
 # Unity generated folders
-Library/
-Temp/
-Obj/
-Build/
-Builds/
-Logs/
-MemoryCaptures/
-Recordings/
+/Library/
+/Temp/
+/Obj/
+/Build/
+/Builds/
+/Logs/
+/MemoryCaptures/
+/Recordings/
 
 # Unity generated project files
 *.csproj

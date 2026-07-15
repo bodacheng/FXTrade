@@ -30,7 +30,7 @@ The pipeline is modeled after the local Jenkins `CustomIOSBuild` job:
 ## Important Parameters
 
 - `UNITY_VERSION`: defaults to `6000.5.1f1`.
-- `BUNDLE_IDENTIFIER`: defaults to `com.DefaultCompany.TestFXTrade`; change this before producing a real signed build.
+- `BUNDLE_IDENTIFIER`: defaults to the app identifier `com.BO.TestFxTrade`.
 - `DEVELOPMENT_TEAM`: Apple Developer Team ID.
 - `AUTOMATIC_SIGNING`: use automatic signing when true. For manual signing, set `PROVISIONING_PROFILE_SPECIFIER`.
 - `EXPORT_METHOD`: `development`, `ad-hoc`, `app-store`, or `enterprise`.

@@ -97,7 +97,7 @@ pipeline {
         booleanParam(name: 'DEVELOPMENT_BUILD', defaultValue: false, description: 'Build Unity with Development and AllowDebugging options.')
 
         string(name: 'PRODUCT_NAME', defaultValue: 'TestFXTrade', description: 'Unity PlayerSettings.productName for this build.')
-        string(name: 'BUNDLE_IDENTIFIER', defaultValue: 'com.DefaultCompany.TestFXTrade', description: 'iOS bundle identifier.')
+        string(name: 'BUNDLE_IDENTIFIER', defaultValue: 'com.BO.TestFxTrade', description: 'iOS bundle identifier.')
         string(name: 'BUNDLE_VERSION', defaultValue: '1.0', description: 'CFBundleShortVersionString.')
 
         booleanParam(name: 'AUTOMATIC_SIGNING', defaultValue: true, description: 'Use automatic code signing in Unity/Xcode.')
