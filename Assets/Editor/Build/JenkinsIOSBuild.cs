@@ -2,34 +2,47 @@ using System;
 using System.IO;
 using System.Linq;
 using UnityEditor;
+using UnityEditor.Callbacks;
+using UnityEditor.iOS.Xcode;
 using UnityEditor.Build.Reporting;
 
 namespace TestFXTrade.Editor.Build
 {
     public static class JenkinsIOSBuild
     {
-        private const string OutputPathArgument = "-OutputPath";
+        private const string ProductName = "TestFXTrade";
+        private const string BundleIdentifier = "com.BO.TestFXTrade";
+        private const string AppleTeamId = "S88E744TXJ";
+        private const string DefaultOutputPath = "build_ios/Export";
+        private const string DefaultBundleVersion = "1.0";
 
         public static void BuildIOS()
         {
-            string outputPath = ReadArgument(OutputPathArgument, "build_ios/Export");
-            outputPath = Path.GetFullPath(outputPath);
-            Directory.CreateDirectory(outputPath);
+            string outputPath = ReadArgument("-OutputPath", DefaultOutputPath).Trim();
+            if (string.IsNullOrEmpty(outputPath))
+            {
+                throw new ArgumentException("-OutputPath cannot be empty.");
+            }
+
+            if (!EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.iOS, BuildTarget.iOS))
+            {
+                throw new InvalidOperationException("Unable to switch the active build target to iOS.");
+            }
 
             ApplyPlayerSettings();
 
-            BuildPlayerOptions options = new BuildPlayerOptions
+            outputPath = Path.GetFullPath(outputPath);
+            Directory.CreateDirectory(outputPath);
+
+            BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {
                 scenes = GetEnabledScenes(),
                 locationPathName = outputPath,
                 target = BuildTarget.iOS,
                 targetGroup = BuildTargetGroup.iOS,
-                options = GetBuildOptions()
-            };
+                options = BuildOptions.StrictMode
+            });
 
-            EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.iOS, BuildTarget.iOS);
-
-            BuildReport report = BuildPipeline.BuildPlayer(options);
             BuildSummary summary = report.summary;
             if (summary.result != BuildResult.Succeeded)
             {
@@ -42,80 +55,34 @@ namespace TestFXTrade.Editor.Build
 
         private static void ApplyPlayerSettings()
         {
-            string productName = ReadArgument("-productName", string.Empty);
-            if (!string.IsNullOrWhiteSpace(productName))
-            {
-                PlayerSettings.productName = productName.Trim();
-            }
-
-            string bundleIdentifier = ReadArgument("-bundleIdentifier", string.Empty);
-            if (!string.IsNullOrWhiteSpace(bundleIdentifier))
-            {
-                PlayerSettings.SetApplicationIdentifier(UnityEditor.Build.NamedBuildTarget.iOS, bundleIdentifier.Trim());
-            }
-
-            string bundleVersion = ReadArgument("-bundleVersion", string.Empty);
-            if (!string.IsNullOrWhiteSpace(bundleVersion))
-            {
-                PlayerSettings.bundleVersion = bundleVersion.Trim();
-            }
-
-            string buildNumber = ReadArgument("-buildNumber", string.Empty);
-            if (!string.IsNullOrWhiteSpace(buildNumber))
-            {
-                PlayerSettings.iOS.buildNumber = buildNumber.Trim();
-            }
-
-            ApplySigningSettings();
-            AssetDatabase.SaveAssets();
+            PlayerSettings.productName = ProductName;
+            PlayerSettings.SetApplicationIdentifier(UnityEditor.Build.NamedBuildTarget.iOS, BundleIdentifier);
+            PlayerSettings.bundleVersion = ReadNonEmptyArgument("-bundleVersion", DefaultBundleVersion);
+            PlayerSettings.iOS.buildNumber = ReadNonEmptyArgument("-buildNumber", "1");
+            PlayerSettings.iOS.appleDeveloperTeamID = AppleTeamId;
+            PlayerSettings.iOS.appleEnableAutomaticSigning = true;
+            PlayerSettings.iOS.iOSManualProvisioningProfileID = string.Empty;
+            PlayerSettings.iOS.iOSManualProvisioningProfileType = ProvisioningProfileType.Distribution;
         }
 
-        private static void ApplySigningSettings()
+        [PostProcessBuild]
+        public static void ApplyIOSExportCompliance(BuildTarget target, string pathToBuiltProject)
         {
-            bool automaticSigning = ReadBoolArgument("-automaticSigning", true);
-            PlayerSettings.iOS.appleEnableAutomaticSigning = automaticSigning;
-
-            string teamId = ReadArgument("-appleTeamId", string.Empty);
-            if (!string.IsNullOrWhiteSpace(teamId))
-            {
-                PlayerSettings.iOS.appleDeveloperTeamID = teamId.Trim();
-            }
-
-            if (automaticSigning)
+            if (target != BuildTarget.iOS)
             {
                 return;
             }
 
-            string profileSpecifier = ReadArgument("-provisioningProfileSpecifier", string.Empty);
-            if (!string.IsNullOrWhiteSpace(profileSpecifier))
+            string plistPath = Path.Combine(pathToBuiltProject, "Info.plist");
+            if (!File.Exists(plistPath))
             {
-                PlayerSettings.iOS.iOSManualProvisioningProfileID = profileSpecifier.Trim();
+                throw new FileNotFoundException("Generated iOS Info.plist was not found.", plistPath);
             }
 
-            string profileType = ReadArgument("-provisioningProfileType", "Distribution");
-            PlayerSettings.iOS.iOSManualProvisioningProfileType =
-                ParseProvisioningProfileType(profileType);
-        }
-
-        private static ProvisioningProfileType ParseProvisioningProfileType(string value)
-        {
-            if (string.Equals(value, "Development", StringComparison.OrdinalIgnoreCase))
-            {
-                return ProvisioningProfileType.Development;
-            }
-
-            return ProvisioningProfileType.Distribution;
-        }
-
-        private static BuildOptions GetBuildOptions()
-        {
-            BuildOptions options = BuildOptions.StrictMode;
-            if (ReadBoolArgument("-developmentBuild", false))
-            {
-                options |= BuildOptions.Development | BuildOptions.AllowDebugging;
-            }
-
-            return options;
+            PlistDocument plist = new PlistDocument();
+            plist.ReadFromFile(plistPath);
+            plist.root.SetBoolean("ITSAppUsesNonExemptEncryption", false);
+            plist.WriteToFile(plistPath);
         }
 
         private static string[] GetEnabledScenes()
@@ -132,6 +99,17 @@ namespace TestFXTrade.Editor.Build
             }
 
             return scenes;
+        }
+
+        private static string ReadNonEmptyArgument(string name, string defaultValue)
+        {
+            string value = ReadArgument(name, defaultValue).Trim();
+            if (string.IsNullOrEmpty(value))
+            {
+                throw new ArgumentException($"{name} cannot be empty.");
+            }
+
+            return value;
         }
 
         private static string ReadArgument(string name, string defaultValue)
@@ -153,12 +131,6 @@ namespace TestFXTrade.Editor.Build
             }
 
             return defaultValue;
-        }
-
-        private static bool ReadBoolArgument(string name, bool defaultValue)
-        {
-            string value = ReadArgument(name, defaultValue ? "true" : "false");
-            return bool.TryParse(value, out bool parsed) ? parsed : defaultValue;
         }
     }
 }

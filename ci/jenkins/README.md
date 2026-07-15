@@ -1,39 +1,39 @@
 # FXTrade iOS Jenkins Pipeline
 
-This project contains a self-contained `Jenkinsfile` for exporting a Unity iOS Xcode project, archiving it with Xcode, and exporting an `.ipa`.
+The local Jenkins job `FXTradeIOSBuild` builds and uploads the Unity iOS app to App Store Connect. Its approved inline Groovy mirrors the repository `Jenkinsfile`.
 
-## Jenkins Job Setup
+## Fixed project settings
 
-Create a Pipeline job and point it at this repository:
+- Unity version: read from `ProjectSettings/ProjectVersion.txt`
+- Product: `TestFXTrade`
+- Bundle identifier: `com.BO.TestFXTrade`
+- Apple team: `S88E744TXJ`
+- Signing: automatic, with provisioning updates enabled
+- Export method: `app-store-connect`
+- Git credential: `bodacheng`
+- Keychain credential: `PCUSER_PASSWORD`
+- App Store credentials: `AppleStore_API_Key` and `AppleStore_API_Issuer`
 
-- Repository: `https://github.com/bodacheng/FXTrade.git`
-- Branch: `main`
-- Script path: `Jenkinsfile`
-- Recommended macOS agent requirements:
-  - Unity `6000.5.1f1` installed by Unity Hub
-  - Xcode command line tools installed and selected
-  - Apple signing certificate and provisioning profile installed in the build user's keychain
-  - `PCUSER_PASSWORD` Jenkins secret text credential, or change `KEYCHAIN_PASSWORD_CREDENTIAL_ID`
+The App Store Connect `.p8` used by `CustomIOSBuild` is installed once at `~/.appstoreconnect/private_keys/AuthKey_<KEY_ID>.p8`. It is not copied into this repository or the FXTrade Jenkins workspace.
 
-The pipeline is modeled after the local Jenkins `CustomIOSBuild` job:
+## Build parameters
 
-1. Checkout the selected branch.
-2. Optionally delete `Library`.
-3. Optionally run Unity EditMode tests.
-4. Run Unity in batchmode with `TestFXTrade.Editor.Build.JenkinsIOSBuild.BuildIOS`.
-5. Run `pod install` only when the exported Xcode project contains a `Podfile`.
-6. Unlock the macOS keychain.
-7. Run `xcodebuild archive`.
-8. Run `xcodebuild -exportArchive`.
-9. Archive the `.ipa`, Unity logs, and generated `ExportOptions.plist`.
+- `BRANCH`: Git branch, default `main`
+- `APP_VERSION`: `CFBundleShortVersionString`, default `1.0`
+- `CLEAN_LIBRARY`: delete the Unity `Library` cache
+- `CLEAN_WORKSPACE`: delete the Jenkins workspace before checkout
+- `UPLOAD_APP_STORE`: validate and upload after exporting the IPA
 
-## Important Parameters
+There is no Asset Build or CocoaPods stage. The repository currently has no asset-build dependency or `Podfile`.
 
-- `UNITY_VERSION`: defaults to `6000.5.1f1`.
-- `BUNDLE_IDENTIFIER`: defaults to the app identifier `com.BO.TestFxTrade`.
-- `DEVELOPMENT_TEAM`: Apple Developer Team ID.
-- `AUTOMATIC_SIGNING`: use automatic signing when true. For manual signing, set `PROVISIONING_PROFILE_SPECIFIER`.
-- `EXPORT_METHOD`: `development`, `ad-hoc`, `app-store`, or `enterprise`.
-- `ALLOW_PROVISIONING_UPDATES`: enable only if the Jenkins agent is allowed to let Xcode manage signing.
+## Pipeline
 
-The pipeline does not upload to App Store Connect. It only produces an `.ipa` artifact under `build_ios/Ipa`.
+1. Checkout the requested branch.
+2. Read and verify the required Unity editor version.
+3. Export the iOS Xcode project through `JenkinsIOSBuild.BuildIOS`.
+4. Unlock the login keychain.
+5. Archive with automatic signing.
+6. Export and archive the IPA.
+7. Validate and upload the IPA to App Store Connect.
+
+Jenkins keeps the IPA, the current Unity build log, and `ExportOptions.plist` as build artifacts.
