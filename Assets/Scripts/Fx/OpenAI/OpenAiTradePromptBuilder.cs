@@ -17,7 +17,7 @@ namespace TestFXTrade.Fx.OpenAI
             "Answer all natural-language fields in Simplified Chinese. Treat the SBI FX rule snapshot as a hard margin constraint, " +
             "not as a guarantee that a trade is safe. The JSON field suggested_lots remains the internal next-order size in " +
             "standard lots, where 1 standard lot equals 100,000 base-currency units. In summary, reasoning, and risk_warning, " +
-            "describe size as 建玉数量 in base-currency units (通貨), not as lot or 手数. Never invent missing facts or prices. Respect the mode-specific margin limit. " +
+            "describe size as 建玉数量 in base-currency units (通貨), not as lot or 手数. Use current_position_entry_price only when provided; never invent missing facts or prices. Respect the mode-specific margin limit. " +
             "Explicitly mention uncertainty and that the result is informational, not personalized investment advice. " +
             "Keep summary within 30 Chinese characters, reasoning within 90, and risk_warning within 60.";
 
@@ -57,7 +57,8 @@ namespace TestFXTrade.Fx.OpenAI
                 candles,
                 interval,
                 rules,
-                AiTradeAdviceMode.Conservative);
+                AiTradeAdviceMode.Conservative,
+                0d);
         }
 
         public static string Build(
@@ -69,6 +70,27 @@ namespace TestFXTrade.Fx.OpenAI
             SbiFxRuleSnapshot rules,
             AiTradeAdviceMode mode)
         {
+            return Build(
+                principalJpy,
+                netPositionLots,
+                quote,
+                candles,
+                interval,
+                rules,
+                mode,
+                0d);
+        }
+
+        public static string Build(
+            double principalJpy,
+            double netPositionLots,
+            MarketQuote quote,
+            IReadOnlyList<Candle> candles,
+            string interval,
+            SbiFxRuleSnapshot rules,
+            AiTradeAdviceMode mode,
+            double currentPositionEntryPrice)
+        {
             if (double.IsNaN(principalJpy) || double.IsInfinity(principalJpy) || principalJpy <= 0d)
             {
                 throw new ArgumentOutOfRangeException(nameof(principalJpy), "本金必须大于0。 ");
@@ -77,6 +99,13 @@ namespace TestFXTrade.Fx.OpenAI
             if (double.IsNaN(netPositionLots) || double.IsInfinity(netPositionLots))
             {
                 throw new ArgumentOutOfRangeException(nameof(netPositionLots), "净建玉数量必须是有限数值。");
+            }
+
+            if (double.IsNaN(currentPositionEntryPrice) ||
+                double.IsInfinity(currentPositionEntryPrice) ||
+                currentPositionEntryPrice < 0d)
+            {
+                throw new ArgumentOutOfRangeException(nameof(currentPositionEntryPrice), "建仓价必须是0或正数。");
             }
 
             if (quote == null || quote.Price <= 0d)
@@ -110,6 +139,7 @@ namespace TestFXTrade.Fx.OpenAI
             prompt.AppendLine("USER INPUTS");
             prompt.AppendLine(FormattableString.Invariant($"principal_jpy={principalJpy:0.##}"));
             prompt.AppendLine(FormattableString.Invariant($"net_position_quantity={netPositionQuantity:0.##} base_currency_units (positive=long, negative=short, zero=flat)"));
+            prompt.AppendLine(BuildCurrentPositionEntryPromptLine(netPositionLots, currentPositionEntryPrice));
             prompt.AppendLine(FormattableString.Invariant($"net_position_lots={netPositionLots:0.###} (internal schema value; do not mention lots in natural-language fields)"));
             prompt.AppendLine();
             prompt.AppendLine("SBI FX RULES (downloaded locally from the official source)");
@@ -143,6 +173,24 @@ namespace TestFXTrade.Fx.OpenAI
             }
 
             return prompt.ToString();
+        }
+
+        private static string BuildCurrentPositionEntryPromptLine(double netPositionLots, double currentPositionEntryPrice)
+        {
+            if (Math.Abs(netPositionLots) <= 0.0000001d)
+            {
+                return "current_position_entry_price=not_applicable (net position is flat)";
+            }
+
+            if (currentPositionEntryPrice <= 0d)
+            {
+                return "current_position_entry_price=not_provided (do not infer or invent the current position entry price)";
+            }
+
+            string sideText = netPositionLots > 0d
+                ? "positive quantity was bought at this price"
+                : "negative quantity was sold at this price";
+            return FormattableString.Invariant($"current_position_entry_price={currentPositionEntryPrice:0.000} USD/JPY ({sideText})");
         }
 
         private static void AppendRecentCandles(StringBuilder prompt, IReadOnlyList<Candle> candles)

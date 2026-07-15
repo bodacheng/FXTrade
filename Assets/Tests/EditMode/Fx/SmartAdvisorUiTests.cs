@@ -1,5 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
+using TestFXTrade.Fx.Domain;
 using TestFXTrade.Fx.UI;
 using TMPro;
 using UnityEngine;
@@ -13,7 +16,7 @@ namespace TestFXTrade.Tests.EditMode.Fx
         [Test]
         public void PortraitAdvisorUsesTmpAndNonBlockingLoadingWithinReferenceHeight()
         {
-            EventSystem existingEventSystem = Object.FindAnyObjectByType<EventSystem>();
+            EventSystem existingEventSystem = UnityEngine.Object.FindAnyObjectByType<EventSystem>();
             GameObject host = new GameObject("UI Test Host");
             GameObject canvasObject = null;
 
@@ -27,8 +30,18 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 Assert.NotNull(canvasObject);
 
                 Canvas.ForceUpdateCanvases();
+                Assert.NotNull(Resources.Load<Font>("Fonts/NotoSansSC-Regular"));
+                FieldInfo fontField = typeof(FxTradeAdvisorApp).GetField("font", BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.NotNull(fontField);
+                TMP_FontAsset activeFont = (TMP_FontAsset)fontField.GetValue(app);
+                Assert.NotNull(activeFont);
+                Assert.That(activeFont.name, Does.Contain("NotoSansSC Bundled"));
+                Assert.IsTrue(activeFont.HasCharacters("中文建玉数量通貨买卖同步", out System.Collections.Generic.List<char> loadedMissingCharacters), string.Join(string.Empty, loadedMissingCharacters));
+                Assert.IsTrue(activeFont.TryAddCharacters("震荡风险支撑阻力美元日元", out string missingCharacters, true), missingCharacters);
+                Assert.IsEmpty(missingCharacters);
+
                 TMP_InputField[] accountInputs = canvasObject.GetComponentsInChildren<TMP_InputField>(true);
-                Assert.AreEqual(2, accountInputs.Length);
+                Assert.AreEqual(3, accountInputs.Length);
                 int passwordInputCount = 0;
                 for (int i = 0; i < accountInputs.Length; i++)
                 {
@@ -62,12 +75,33 @@ namespace TestFXTrade.Tests.EditMode.Fx
 
                 accountInputs[0].SetTextWithoutNotify("1,000,000");
                 accountInputs[1].SetTextWithoutNotify("-10,000");
+                accountInputs[2].SetTextWithoutNotify("158.250");
                 MethodInfo tryReadInputs = typeof(FxTradeAdvisorApp).GetMethod("TryReadAdvisorInputs", BindingFlags.Instance | BindingFlags.NonPublic);
                 Assert.NotNull(tryReadInputs);
-                object[] inputArgs = { 0d, 0d };
+                object[] inputArgs = { 0d, 0d, 0d };
                 Assert.IsTrue((bool)tryReadInputs.Invoke(app, inputArgs));
                 Assert.AreEqual(1000000d, (double)inputArgs[0]);
                 Assert.AreEqual(-0.1d, (double)inputArgs[1], 0.0000001d);
+                Assert.AreEqual(158.250d, (double)inputArgs[2], 0.0000001d);
+
+                MethodInfo renderMarketMetrics = typeof(FxTradeAdvisorApp).GetMethod("RenderMarketMetrics", BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.NotNull(renderMarketMetrics);
+                renderMarketMetrics.Invoke(
+                    app,
+                    new object[]
+                    {
+                        new MarketQuote("USD/JPY", 158.300d, new DateTime(2026, 7, 15, 1, 2, 3, DateTimeKind.Utc), true, "Test"),
+                        new List<Candle>
+                        {
+                            new Candle(new DateTime(2026, 7, 15, 1, 0, 0, DateTimeKind.Utc), 158.2d, 158.3d, 158.1d, 158.25d),
+                            new Candle(new DateTime(2026, 7, 15, 1, 5, 0, DateTimeKind.Utc), 158.25d, 158.35d, 158.2d, 158.3d)
+                        },
+                        "5min"
+                    });
+                FieldInfo metricsField = typeof(FxTradeAdvisorApp).GetField("metricsText", BindingFlags.Instance | BindingFlags.NonPublic);
+                TMP_Text metricsText = (TMP_Text)metricsField.GetValue(app);
+                Assert.That(metricsText.text, Does.Contain("负数=卖出"));
+                Assert.That(metricsText.text, Does.Contain("建仓价 USD/JPY 158.250"));
 
                 MethodInfo normalizeAdviceText = typeof(FxTradeAdvisorApp).GetMethod("NormalizeVisibleAdviceText", BindingFlags.Static | BindingFlags.NonPublic);
                 Assert.NotNull(normalizeAdviceText);
@@ -129,15 +163,15 @@ namespace TestFXTrade.Tests.EditMode.Fx
             {
                 if (canvasObject != null)
                 {
-                    Object.DestroyImmediate(canvasObject);
+                    UnityEngine.Object.DestroyImmediate(canvasObject);
                 }
 
-                Object.DestroyImmediate(host);
+                UnityEngine.Object.DestroyImmediate(host);
 
-                EventSystem currentEventSystem = Object.FindAnyObjectByType<EventSystem>();
+                EventSystem currentEventSystem = UnityEngine.Object.FindAnyObjectByType<EventSystem>();
                 if (existingEventSystem == null && currentEventSystem != null)
                 {
-                    Object.DestroyImmediate(currentEventSystem.gameObject);
+                    UnityEngine.Object.DestroyImmediate(currentEventSystem.gameObject);
                 }
             }
         }

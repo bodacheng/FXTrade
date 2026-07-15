@@ -97,10 +97,14 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 quote,
                 BuildCandles(),
                 "5min",
-                rules);
+                rules,
+                AiTradeAdviceMode.Conservative,
+                158.25d);
 
             Assert.That(prompt, Does.Contain("principal_jpy=1000000"));
             Assert.That(prompt, Does.Contain("net_position_quantity=-25000"));
+            Assert.That(prompt, Does.Contain("current_position_entry_price=158.250 USD/JPY"));
+            Assert.That(prompt, Does.Contain("negative quantity was sold at this price"));
             Assert.That(prompt, Does.Contain("net_position_lots=-0.25"));
             Assert.That(prompt, Does.Contain("required_margin_per_10,000_currency=64982 JPY"));
             Assert.That(prompt, Does.Contain("required_margin_per_1_standard_lot=649820 JPY"));

@@ -18,6 +18,7 @@ test("forced directional schema excludes HOLD", () => {
   assert.deepEqual(request.text.format.schema.properties.action.enum, ["BUY", "SELL"]);
   assert.match(request.instructions, /never HOLD/);
   assert.match(request.instructions, /建玉数量/);
+  assert.match(request.instructions, /current_position_entry_price/);
   assert.match(request.instructions, /not as lot/);
 });
 

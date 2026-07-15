@@ -13,6 +13,7 @@ using TestFXTrade.Fx.Sbi;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.TextCore.LowLevel;
 using UnityEngine.UI;
 
 namespace TestFXTrade.Fx.UI
@@ -24,7 +25,8 @@ namespace TestFXTrade.Fx.UI
         private const float CandleRefreshSeconds = 60f;
         private const int CandleOutputSize = 160;
         private const int DynamicFontSize = 90;
-        private const string ChineseFontProbeText = "中文交易建议保证金行情规则买卖";
+        private const string BundledChineseFontResourcePath = "Fonts/NotoSansSC-Regular";
+        private const string ChineseFontProbeText = "中文交易建议保证金行情规则买卖建玉数量通貨同步均价建仓";
         private const NumberStyles UserNumberStyles = NumberStyles.Float | NumberStyles.AllowThousands;
         private static readonly Vector2 MobileReferenceResolution = new Vector2(390f, 844f);
         private static readonly Regex VisibleLotQuantityPattern = new Regex(
@@ -50,6 +52,7 @@ namespace TestFXTrade.Fx.UI
         private TMP_FontAsset font;
         private TMP_InputField principalInput;
         private TMP_InputField netPositionInput;
+        private TMP_InputField positionEntryPriceInput;
         private TMP_Dropdown intervalDropdown;
         private Toggle autoRefreshToggle;
         private Button syncSbiRulesButton;
@@ -221,6 +224,7 @@ namespace TestFXTrade.Fx.UI
 
             principalInput = AddInput(smartFields, "本金 JPY", "1000000", false, TMP_InputField.ContentType.Standard);
             netPositionInput = AddInput(smartFields, "净建玉数量", "0", false, TMP_InputField.ContentType.Standard);
+            positionEntryPriceInput = AddInput(smartFields, "USD/JPY均价", string.Empty, false, TMP_InputField.ContentType.DecimalNumber);
 
             syncSbiRulesButton = AddButton(smartFields, "SBI规则", "同步");
             syncSbiRulesButton.onClick.AddListener(() => _ = SyncSbiRulesAsync());
@@ -464,13 +468,13 @@ namespace TestFXTrade.Fx.UI
 
             double trendScore = TechnicalIndicatorService.CalculateTrendScore(candles, out double atrPips, out double rsi);
             double netPositionQuantity = ParseInput(netPositionInput, 0d);
-            string positionLabel = netPositionQuantity > 0d ? "多" : netPositionQuantity < 0d ? "空" : "空仓";
+            double positionEntryPrice = ParseInput(positionEntryPriceInput, 0d);
             string quantityRuleText = sbiRules != null && sbiRules.IsUsable
                 ? $"最小 {sbiRules.MinimumOrderUnits:N0} 通貨"
                 : "输入单位：通貨";
             metricsText.text =
                 $"趋势 {trendScore:0.00}   RSI {rsi:0.0}   ATR {atrPips:0.0} pips\n" +
-                $"当前净建玉数量 {FormatBaseCurrencyUnits(netPositionQuantity)} 通貨（{positionLabel}）   {quantityRuleText}";
+                $"{FormatCurrentPositionSummary(netPositionQuantity, positionEntryPrice)}   {quantityRuleText}";
         }
 
         private async Task SyncSbiRulesAsync()
@@ -520,7 +524,7 @@ namespace TestFXTrade.Fx.UI
                 return;
             }
 
-            if (!TryReadAdvisorInputs(out double principalJpy, out double netPositionLots))
+            if (!TryReadAdvisorInputs(out double principalJpy, out double netPositionLots, out double positionEntryPrice))
             {
                 return;
             }
@@ -569,7 +573,8 @@ namespace TestFXTrade.Fx.UI
                     realtimeCandles,
                     GetSelectedInterval(),
                     sbiRules,
-                    mode);
+                    mode,
+                    positionEntryPrice);
 
                 string modeLabel = mode == AiTradeAdviceMode.ForcedDirectional ? "积极策略" : "稳健策略";
                 recommendationText.text = $"OpenAI正在按{modeLabel}结合实时行情、技术指标和SBI保证金规则进行分析……";
@@ -706,10 +711,11 @@ namespace TestFXTrade.Fx.UI
             }
         }
 
-        private bool TryReadAdvisorInputs(out double principalJpy, out double netPositionLots)
+        private bool TryReadAdvisorInputs(out double principalJpy, out double netPositionLots, out double positionEntryPrice)
         {
             principalJpy = 0d;
             netPositionLots = 0d;
+            positionEntryPrice = 0d;
 
             if (principalInput == null ||
                 !double.TryParse(principalInput.text, UserNumberStyles, CultureInfo.InvariantCulture, out principalJpy) ||
@@ -723,16 +729,35 @@ namespace TestFXTrade.Fx.UI
             }
 
             if (netPositionInput == null ||
-                !double.TryParse(netPositionInput.text, UserNumberStyles, CultureInfo.InvariantCulture, out netPositionLots) ||
-                double.IsNaN(netPositionLots) ||
-                double.IsInfinity(netPositionLots))
+                !double.TryParse(netPositionInput.text, UserNumberStyles, CultureInfo.InvariantCulture, out double netPositionQuantity) ||
+                double.IsNaN(netPositionQuantity) ||
+                double.IsInfinity(netPositionQuantity))
             {
                 SetStatus("输入内容有误。");
                 SetWarning("净建玉数量必须是数字：正数为多头，负数为空头，0为空仓。单位为通貨。");
                 return false;
             }
 
-            netPositionLots = CurrencyUnitsToStandardLots(netPositionLots);
+            string entryPriceText = positionEntryPriceInput == null ? string.Empty : positionEntryPriceInput.text;
+            if (!string.IsNullOrWhiteSpace(entryPriceText) &&
+                (!double.TryParse(entryPriceText, UserNumberStyles, CultureInfo.InvariantCulture, out positionEntryPrice) ||
+                 double.IsNaN(positionEntryPrice) ||
+                 double.IsInfinity(positionEntryPrice) ||
+                 positionEntryPrice <= 0d))
+            {
+                SetStatus("输入内容有误。");
+                SetWarning("USD/JPY建仓价必须是大于0的价格。");
+                return false;
+            }
+
+            if (Math.Abs(netPositionQuantity) > 0.0000001d && positionEntryPrice <= 0d)
+            {
+                SetStatus("输入内容有误。");
+                SetWarning("当前净建玉数量不为0时，请填写USD/JPY建仓价：数量正数=买入，负数=卖出。");
+                return false;
+            }
+
+            netPositionLots = CurrencyUnitsToStandardLots(netPositionQuantity);
             return true;
         }
 
@@ -987,6 +1012,25 @@ namespace TestFXTrade.Fx.UI
         {
             double rounded = Math.Round(quantity, 0, MidpointRounding.AwayFromZero);
             return rounded.ToString("N0", CultureInfo.InvariantCulture);
+        }
+
+        private static string FormatCurrentPositionSummary(double netPositionQuantity, double entryPrice)
+        {
+            if (Math.Abs(netPositionQuantity) <= 0.0000001d)
+            {
+                return "当前净建玉数量 0 通貨（空仓）";
+            }
+
+            string sideLabel = netPositionQuantity > 0d ? "正数=买入" : "负数=卖出";
+            string entryText = entryPrice > 0d
+                ? $"，建仓价 USD/JPY {FormatUsdJpyPrice(entryPrice)}"
+                : "，建仓价未填写";
+            return $"当前净建玉数量 {FormatBaseCurrencyUnits(netPositionQuantity)} 通貨（{sideLabel}{entryText}）";
+        }
+
+        private static string FormatUsdJpyPrice(double price)
+        {
+            return price.ToString("0.000", CultureInfo.InvariantCulture);
         }
 
         private static string NormalizeVisibleAdviceText(string value)
@@ -1267,6 +1311,14 @@ namespace TestFXTrade.Fx.UI
 
         private static TMP_FontAsset CreateChineseUiFont()
         {
+            TMP_FontAsset bundledFontAsset = CreateBundledChineseUiFont();
+            if (CanRenderChinese(bundledFontAsset))
+            {
+                return bundledFontAsset;
+            }
+
+            DestroyRuntimeFontAsset(bundledFontAsset);
+
             for (int i = 0; i < ChineseSystemFontCandidates.GetLength(0); i++)
             {
                 string familyName = ChineseSystemFontCandidates[i, 0];
@@ -1292,6 +1344,31 @@ namespace TestFXTrade.Fx.UI
 
             Font legacyFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             return legacyFont == null ? null : TMP_FontAsset.CreateFontAsset(legacyFont);
+        }
+
+        private static TMP_FontAsset CreateBundledChineseUiFont()
+        {
+            Font bundledFont = Resources.Load<Font>(BundledChineseFontResourcePath);
+            if (bundledFont == null)
+            {
+                return null;
+            }
+
+            TMP_FontAsset bundledFontAsset = TMP_FontAsset.CreateFontAsset(
+                bundledFont,
+                DynamicFontSize,
+                9,
+                GlyphRenderMode.SDFAA,
+                1024,
+                1024,
+                AtlasPopulationMode.Dynamic,
+                true);
+            if (bundledFontAsset != null)
+            {
+                bundledFontAsset.name = "NotoSansSC Bundled Dynamic TMP";
+            }
+
+            return bundledFontAsset;
         }
 
         private static void DestroyRuntimeFontAsset(TMP_FontAsset fontAsset)
