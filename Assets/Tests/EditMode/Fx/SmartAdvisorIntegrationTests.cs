@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
 using TestFXTrade.Fx.Domain;
+using TestFXTrade.Fx.MarketData;
 using TestFXTrade.Fx.OpenAI;
 using TestFXTrade.Fx.Sbi;
 using UnityEngine;
@@ -63,12 +64,13 @@ namespace TestFXTrade.Tests.EditMode.Fx
         }
 
         [Test]
-        public void ParsesStructuredOpenAiAdviceFromResponsesApi()
+        public void ParsesStructuredAdviceFromAzureRelay()
         {
             const string responseJson =
-                "{\"output\":[{\"content\":[{\"type\":\"output_text\",\"text\":\"{\\\"action\\\":\\\"BUY\\\",\\\"suggested_lots\\\":0.01,\\\"confidence\\\":0.72,\\\"summary\\\":\\\"短线偏多\\\",\\\"reasoning\\\":\\\"趋势与动量一致\\\",\\\"risk_warning\\\":\\\"波动扩大时观望\\\"}\"}]}]}";
+                "{\"action\":\"BUY\",\"suggested_lots\":0.01,\"confidence\":0.72," +
+                "\"summary\":\"短线偏多\",\"reasoning\":\"趋势与动量一致\",\"risk_warning\":\"波动扩大时观望\"}";
 
-            OpenAiTradeAdvice advice = OpenAiTradeAdvisorClient.ParseResponse(responseJson);
+            OpenAiTradeAdvice advice = AzureRelayTradeAdvisorClient.ParseResponse(responseJson);
 
             Assert.AreEqual("BUY", advice.action);
             Assert.AreEqual(0.01d, advice.suggested_lots);
@@ -77,24 +79,112 @@ namespace TestFXTrade.Tests.EditMode.Fx
         }
 
         [Test]
-        public void OpenAiRequestUsesStrictResponsesJsonSchema()
+        public void AzureRelayRequestContainsOnlyPromptAndMode()
         {
-            OpenAiTradeAdvisorClient client = new OpenAiTradeAdvisorClient("test-key");
-            MethodInfo buildRequest = typeof(OpenAiTradeAdvisorClient).GetMethod(
+            MethodInfo buildRequest = typeof(AzureRelayTradeAdvisorClient).GetMethod(
                 "BuildRequest",
-                BindingFlags.Instance | BindingFlags.NonPublic);
+                BindingFlags.Static | BindingFlags.NonPublic,
+                null,
+                new[] { typeof(string), typeof(AiTradeAdviceMode) },
+                null);
 
             Assert.NotNull(buildRequest);
-            object payload = buildRequest.Invoke(client, new object[] { "test prompt" });
+            object payload = buildRequest.Invoke(
+                null,
+                new object[] { "test prompt", AiTradeAdviceMode.Conservative });
             string json = JsonUtility.ToJson(payload);
 
-            Assert.That(json, Does.Contain("\"model\":\"gpt-5.6\""));
-            Assert.That(json, Does.Contain("\"store\":false"));
-            Assert.That(json, Does.Contain("\"type\":\"json_schema\""));
-            Assert.That(json, Does.Contain("\"strict\":true"));
-            Assert.That(json, Does.Contain("\"enum\":[\"BUY\",\"SELL\",\"HOLD\"]"));
-            Assert.That(json, Does.Not.Contain("\"suggested_lots\":{\"type\":\"number\",\"enum\""));
-            Assert.That(json, Does.Not.Contain("test-key"));
+            Assert.That(json, Does.Contain("\"prompt\":\"test prompt\""));
+            Assert.That(json, Does.Contain("\"mode\":\"conservative\""));
+            Assert.That(json, Does.Not.Contain("OPENAI_API_KEY"));
+            Assert.That(json, Does.Not.Contain("TWELVE_DATA_API_KEY"));
+            Assert.That(json, Does.Not.Contain("Authorization"));
+        }
+
+        [Test]
+        public void ForcedDirectionalModeRequiresBuyOrSellAndUsesHigherControlledLimit()
+        {
+            SbiFxRuleSnapshot rules = BuildRules();
+            MarketQuote quote = new MarketQuote(
+                FxConstants.UsdJpySymbol,
+                158.125d,
+                new DateTime(2026, 7, 14, 1, 2, 3, DateTimeKind.Utc),
+                true,
+                "Test");
+
+            string prompt = OpenAiTradePromptBuilder.Build(
+                1000000d,
+                0d,
+                quote,
+                BuildCandles(),
+                "5min",
+                rules,
+                AiTradeAdviceMode.ForcedDirectional);
+
+            Assert.That(prompt, Does.Contain("decision_mode=forced_directional"));
+            Assert.That(prompt, Does.Contain("margin_usage_limit_percent=70"));
+            Assert.That(prompt, Does.Contain("must return BUY or SELL, never HOLD"));
+
+            MethodInfo buildRequest = typeof(AzureRelayTradeAdvisorClient).GetMethod(
+                "BuildRequest",
+                BindingFlags.Static | BindingFlags.NonPublic,
+                null,
+                new[] { typeof(string), typeof(AiTradeAdviceMode) },
+                null);
+            object payload = buildRequest.Invoke(
+                null,
+                new object[] { prompt, AiTradeAdviceMode.ForcedDirectional });
+            string json = JsonUtility.ToJson(payload);
+
+            Assert.That(json, Does.Contain("\"mode\":\"forced_directional\""));
+        }
+
+        [Test]
+        public void ForcedDirectionalLocalGuardProducesExecutableMinimumOrder()
+        {
+            OpenAiTradeAdvice advice = new OpenAiTradeAdvice
+            {
+                action = "BUY",
+                suggested_lots = 0d,
+                confidence = 0.3d,
+                summary = "弱多头",
+                reasoning = "方向信号较弱",
+                risk_warning = "低置信度"
+            };
+            MethodInfo applyGuard = typeof(TestFXTrade.Fx.UI.FxTradeAdvisorApp).GetMethod(
+                "ApplyLocalMarginGuard",
+                BindingFlags.Static | BindingFlags.NonPublic);
+
+            Assert.NotNull(applyGuard);
+            object adjusted = applyGuard.Invoke(
+                null,
+                new object[]
+                {
+                    advice,
+                    1000000d,
+                    0d,
+                    BuildRules(),
+                    AiTradeAdviceMode.ForcedDirectional
+                });
+
+            Assert.IsTrue((bool)adjusted);
+            Assert.AreEqual("BUY", advice.action);
+            Assert.AreEqual(0.001d, advice.suggested_lots, 0.0000001d);
+        }
+
+        [Test]
+        public void AzureRelaySettingsRequireTlsExceptForLoopbackDevelopment()
+        {
+            Assert.AreEqual(
+                "https://example.azurewebsites.net",
+                AzureRelaySettings.NormalizeBaseUrl("https://example.azurewebsites.net/"));
+            Assert.AreEqual(
+                "http://localhost:7071",
+                AzureRelaySettings.NormalizeBaseUrl("http://localhost:7071/"));
+            Assert.AreEqual(string.Empty, AzureRelaySettings.NormalizeBaseUrl("http://example.com"));
+            Assert.AreEqual(
+                string.Empty,
+                AzureRelaySettings.NormalizeBaseUrl("https://YOUR_FUNCTION_APP.azurewebsites.net"));
         }
 
         private static SbiFxRuleSnapshot BuildRules()

@@ -2,6 +2,12 @@ using System;
 
 namespace TestFXTrade.Fx.OpenAI
 {
+    public enum AiTradeAdviceMode
+    {
+        Conservative,
+        ForcedDirectional
+    }
+
     [Serializable]
     public sealed class OpenAiTradeAdvice
     {

@@ -1,0 +1,17 @@
+{
+  "name": "test-fx-trade-azure-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Azure Functions relay for TestFXTrade market data and AI advice",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "func start",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.16.2"
+  }
+}

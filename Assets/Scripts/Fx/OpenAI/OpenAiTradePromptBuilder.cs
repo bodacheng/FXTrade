@@ -12,15 +12,34 @@ namespace TestFXTrade.Fx.OpenAI
     {
         private const int PromptCandleCount = 32;
 
-        public const string Instructions =
-            "You are a conservative USD/JPY decision-support assistant. Return only the requested JSON schema. " +
+        private const string CommonInstructions =
+            "You are a USD/JPY decision-support assistant. Return only the requested JSON schema. " +
             "Answer all natural-language fields in Simplified Chinese. Treat the SBI FX rule snapshot as a hard margin constraint, " +
-            "not as a guarantee that a trade is safe. Choose BUY, SELL, or HOLD. suggested_lots is the size of the next order, " +
-            "where 1 lot equals 100,000 base-currency units and HOLD must use 0. Never invent missing facts or prices. " +
-            "Prefer HOLD when data is stale, insufficient, conflicting, or when the current position is already aggressive. " +
-            "Keep estimated post-trade required margin at or below 50% of principal unless the order only reduces exposure. " +
+            "not as a guarantee that a trade is safe. suggested_lots is the size of the next order, where 1 lot equals " +
+            "100,000 base-currency units. Never invent missing facts or prices. Respect the mode-specific margin limit. " +
             "Explicitly mention uncertainty and that the result is informational, not personalized investment advice. " +
             "Keep summary within 30 Chinese characters, reasoning within 90, and risk_warning within 60.";
+
+        public static string GetInstructions(AiTradeAdviceMode mode)
+        {
+            if (mode == AiTradeAdviceMode.ForcedDirectional)
+            {
+                return CommonInstructions +
+                    " This is a relatively aggressive forced-direction scenario. You must choose BUY or SELL and never HOLD. " +
+                    "When evidence is weak or conflicting, choose the more defensible direction, lower confidence, and use a smaller feasible order. " +
+                    "Do not use forced direction as a reason to ignore uncertainty, the SBI minimum order, or the 70% margin limit.";
+            }
+
+            return CommonInstructions +
+                " This is the conservative scenario. Choose BUY, SELL, or HOLD; HOLD must use suggested_lots=0. " +
+                "Prefer HOLD when data is stale, insufficient, conflicting, or when the current position is already aggressive. " +
+                "Keep estimated post-trade required margin at or below 50% of principal unless the order only reduces exposure.";
+        }
+
+        public static double GetMarginLimitRatio(AiTradeAdviceMode mode)
+        {
+            return mode == AiTradeAdviceMode.ForcedDirectional ? 0.7d : 0.5d;
+        }
 
         public static string Build(
             double principalJpy,
@@ -29,6 +48,25 @@ namespace TestFXTrade.Fx.OpenAI
             IReadOnlyList<Candle> candles,
             string interval,
             SbiFxRuleSnapshot rules)
+        {
+            return Build(
+                principalJpy,
+                netPositionLots,
+                quote,
+                candles,
+                interval,
+                rules,
+                AiTradeAdviceMode.Conservative);
+        }
+
+        public static string Build(
+            double principalJpy,
+            double netPositionLots,
+            MarketQuote quote,
+            IReadOnlyList<Candle> candles,
+            string interval,
+            SbiFxRuleSnapshot rules,
+            AiTradeAdviceMode mode)
         {
             if (double.IsNaN(principalJpy) || double.IsInfinity(principalJpy) || principalJpy <= 0d)
             {
@@ -53,10 +91,16 @@ namespace TestFXTrade.Fx.OpenAI
             double trendScore = TechnicalIndicatorService.CalculateTrendScore(candles, out double atrPips, out double rsi);
             double marginPerLot = rules.RequiredMarginPerStandardLotJpy;
             double currentEstimatedMargin = Math.Abs(netPositionLots) * marginPerLot;
-            double conservativeGrossLotLimit = marginPerLot > 0d ? (principalJpy * 0.5d) / marginPerLot : 0d;
+            double marginLimitRatio = GetMarginLimitRatio(mode);
+            double grossLotLimit = marginPerLot > 0d ? (principalJpy * marginLimitRatio) / marginPerLot : 0d;
+            double maximumBuyOrderLots = Math.Max(0d, grossLotLimit - netPositionLots);
+            double maximumSellOrderLots = Math.Max(0d, grossLotLimit + netPositionLots);
+            int marginLimitPercent = (int)Math.Round(marginLimitRatio * 100d);
+            string modeLabel = mode == AiTradeAdviceMode.ForcedDirectional ? "forced_directional" : "conservative";
 
             StringBuilder prompt = new StringBuilder(4096);
-            prompt.AppendLine("Generate one conservative USD/JPY order recommendation from this exact snapshot.");
+            prompt.AppendLine("Generate one USD/JPY order recommendation from this exact snapshot.");
+            prompt.AppendLine(FormattableString.Invariant($"decision_mode={modeLabel}"));
             prompt.AppendLine();
             prompt.AppendLine("USER INPUTS");
             prompt.AppendLine(FormattableString.Invariant($"principal_jpy={principalJpy:0.##}"));
@@ -66,7 +110,10 @@ namespace TestFXTrade.Fx.OpenAI
             prompt.AppendLine(rules.ToPromptText());
             prompt.AppendLine(FormattableString.Invariant($"required_margin_per_1_standard_lot={marginPerLot:0.##} JPY"));
             prompt.AppendLine(FormattableString.Invariant($"current_estimated_margin={currentEstimatedMargin:0.##} JPY"));
-            prompt.AppendLine(FormattableString.Invariant($"conservative_50_percent_gross_limit={conservativeGrossLotLimit:0.###} lots"));
+            prompt.AppendLine(FormattableString.Invariant($"margin_usage_limit_percent={marginLimitPercent}"));
+            prompt.AppendLine(FormattableString.Invariant($"gross_position_limit={grossLotLimit:0.###} lots"));
+            prompt.AppendLine(FormattableString.Invariant($"maximum_buy_order={maximumBuyOrderLots:0.###} lots"));
+            prompt.AppendLine(FormattableString.Invariant($"maximum_sell_order={maximumSellOrderLots:0.###} lots"));
             prompt.AppendLine();
             prompt.AppendLine("LIVE MARKET SNAPSHOT");
             prompt.AppendLine(FormattableString.Invariant($"symbol={quote.Symbol}; price={quote.Price:0.000}; interval={interval}; quote_time_utc={quote.TimeUtc:O}; timestamp_reliable={quote.IsTimestampReliable}"));
@@ -75,8 +122,17 @@ namespace TestFXTrade.Fx.OpenAI
             prompt.AppendLine("RECENT CANDLES (oldest to newest)");
             AppendRecentCandles(prompt, candles);
             prompt.AppendLine();
-            prompt.AppendLine("Return BUY or SELL only when the evidence is strong enough; otherwise return HOLD. " +
-                              "The order must respect the SBI minimum order unit and the margin constraints above.");
+            if (mode == AiTradeAdviceMode.ForcedDirectional)
+            {
+                prompt.AppendLine("You must return BUY or SELL, never HOLD. If the signal is weak, express that through lower confidence, " +
+                                  "a smaller feasible order, and an explicit risk warning. Respect the SBI minimum order and 70% margin limit.");
+            }
+            else
+            {
+                prompt.AppendLine("Return BUY or SELL only when the evidence is strong enough; otherwise return HOLD. " +
+                                  "The order must respect the SBI minimum order unit and the 50% margin limit.");
+            }
+
             return prompt.ToString();
         }
 

@@ -28,6 +28,18 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 Canvas.ForceUpdateCanvases();
                 InputField[] accountInputs = canvasObject.GetComponentsInChildren<InputField>(true);
                 Assert.AreEqual(2, accountInputs.Length);
+                int passwordInputCount = 0;
+                for (int i = 0; i < accountInputs.Length; i++)
+                {
+                    if (accountInputs[i].contentType == InputField.ContentType.Password)
+                    {
+                        passwordInputCount++;
+                    }
+                }
+
+                Assert.AreEqual(0, passwordInputCount);
+                Button[] buttons = canvasObject.GetComponentsInChildren<Button>(true);
+                Assert.AreEqual(4, buttons.Length);
 
                 Transform safeArea = canvasObject.transform.Find("Root/Safe Area Content");
                 Assert.NotNull(safeArea);
@@ -36,6 +48,17 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 RectTransform safeAreaRect = safeArea.GetComponent<RectTransform>();
                 float preferredHeight = LayoutUtility.GetPreferredHeight(safeAreaRect);
                 Assert.LessOrEqual(preferredHeight, 844f);
+
+                Transform chartPanel = safeArea.Find("ChartPanel");
+                Transform adviceText = safeArea.Find("AI Advice Text");
+                Assert.NotNull(chartPanel);
+                Assert.NotNull(adviceText);
+
+                LayoutElement chartLayout = chartPanel.GetComponent<LayoutElement>();
+                LayoutElement adviceLayout = adviceText.GetComponent<LayoutElement>();
+                Assert.Less(chartLayout.preferredHeight, adviceLayout.preferredHeight);
+                Assert.AreEqual(0f, chartLayout.flexibleHeight);
+                Assert.Greater(adviceLayout.flexibleHeight, 0f);
             }
             finally
             {

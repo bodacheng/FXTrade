@@ -41,6 +41,7 @@ namespace TestFXTrade.Fx.UI
         private Toggle autoRefreshToggle;
         private Button syncSbiRulesButton;
         private Button requestAiAdviceButton;
+        private Button aggressiveAiAdviceButton;
         private Text marketSourceText;
         private Text statusText;
         private Text sbiRulesText;
@@ -59,11 +60,10 @@ namespace TestFXTrade.Fx.UI
         private CancellationTokenSource marketDataCancellation;
         private CancellationTokenSource advisoryCancellation;
         private IFxMarketDataProvider marketDataProvider;
-        private OpenAiTradeAdvisorClient openAiClient;
+        private AzureRelayTradeAdvisorClient openAiClient;
         private SbiFxRuleSnapshot sbiRules;
         private MarketQuote latestQuote;
-        private string marketApiKey = string.Empty;
-        private string openAiApiKey = string.Empty;
+        private string relayBaseUrl = string.Empty;
         private float nextQuoteRefreshAt;
         private float nextCandleRefreshAt;
         private bool quoteRefreshInFlight;
@@ -103,33 +103,26 @@ namespace TestFXTrade.Fx.UI
 
         private void Start()
         {
-            LocalFxSettings settings = LocalFxSettings.Load();
-            marketApiKey = settings.ApiKey;
-            openAiApiKey = settings.OpenAiApiKey;
-            openAiClient = new OpenAiTradeAdvisorClient(openAiApiKey);
+            AzureRelaySettings settings = AzureRelaySettings.Load();
+            relayBaseUrl = settings.BaseUrl;
             sbiRules = sbiRuleService.LoadLocal();
             RenderSbiRuleState();
+            RenderRelayState(settings.SourceLabel);
 
-            if (settings.HasApiKey)
+            if (settings.IsConfigured)
             {
-                marketDataProvider = new TwelveDataMarketDataProvider(marketApiKey);
-                string aiState = settings.HasOpenAiApiKey
-                    ? $"OpenAI {OpenAiTradeAdvisorClient.DefaultModel}（{LocalizeSourceLabel(settings.OpenAiSourceLabel)}）"
-                    : $"缺少 {LocalFxSettings.OpenAiApiKeyVariableName}";
-                marketSourceText.text = $"行情：Twelve Data | AI：{aiState}";
-                SetStatus("已读取本地 API Key，正在刷新 USD/JPY 实时行情。");
+                marketDataProvider = new AzureRelayMarketDataProvider(relayBaseUrl);
+                openAiClient = new AzureRelayTradeAdvisorClient(relayBaseUrl);
+                SetStatus("已连接 Azure 中转，正在刷新 USD/JPY 实时行情。");
                 nextQuoteRefreshAt = Time.time + QuoteRefreshSeconds;
                 nextCandleRefreshAt = Time.time + CandleRefreshSeconds;
-                SetWarning(settings.HasOpenAiApiKey
-                    ? "AI建议仅供参考，不构成投资建议。"
-                    : $"请在 .env 中配置 {LocalFxSettings.OpenAiApiKeyVariableName}。AI建议仅供参考。");
+                SetWarning("供应商密钥仅保存在后台。AI建议仅供参考，不构成投资建议。");
                 _ = RefreshCandlesAndQuoteAsync(true);
                 return;
             }
 
-            marketSourceText.text = $"行情数据：缺少 {LocalFxSettings.ApiKeyVariableName}";
-            SetStatus("请先在 .env 中配置 TWELVE_DATA_API_KEY。");
-            SetWarning("请根据项目根目录中的 .env.example 配置行情与 OpenAI 密钥，然后重新启动。");
+            SetStatus("尚未配置 Azure 中转地址。");
+            SetWarning("请部署 azure-relay，并在 AzureRelayConfig.json 中填写 Function App 地址。");
             nextQuoteRefreshAt = float.PositiveInfinity;
             nextCandleRefreshAt = float.PositiveInfinity;
         }
@@ -138,7 +131,7 @@ namespace TestFXTrade.Fx.UI
         {
             RefreshAdaptiveLayout();
 
-            if (string.IsNullOrWhiteSpace(marketApiKey) || !autoRefreshToggle.isOn)
+            if (string.IsNullOrWhiteSpace(relayBaseUrl) || !autoRefreshToggle.isOn)
             {
                 return;
             }
@@ -197,7 +190,7 @@ namespace TestFXTrade.Fx.UI
         private void BuildMarketControls(Transform parent)
         {
             AddHeader(parent, "USD/JPY 交易助手");
-            marketSourceText = AddCompactInfoText(parent, "正在读取本地行情配置……");
+            marketSourceText = AddCompactInfoText(parent, "正在读取 Azure 中转配置……");
 
             Transform controls = CreateCompactFieldRow(parent, "Market Controls");
             AddValueRow(controls, "交易对", FxConstants.UsdJpySymbol);
@@ -215,14 +208,23 @@ namespace TestFXTrade.Fx.UI
         private void BuildInputColumn(Transform parent)
         {
             Transform smartFields = CreateCompactSection(parent, "智能建议");
+            LayoutElement smartSectionLayout = smartFields.parent.GetComponent<LayoutElement>();
+            smartSectionLayout.minHeight = 110;
+            smartSectionLayout.preferredHeight = 110;
+
             principalInput = AddInput(smartFields, "本金 JPY", "1000000");
             netPositionInput = AddInput(smartFields, "净持仓 lots", "0");
 
             syncSbiRulesButton = AddButton(smartFields, "SBI规则", "同步");
             syncSbiRulesButton.onClick.AddListener(() => _ = SyncSbiRulesAsync());
 
-            requestAiAdviceButton = AddButton(smartFields, "AI建议", "获取");
-            requestAiAdviceButton.onClick.AddListener(() => _ = RequestAiAdviceAsync());
+            Transform adviceActions = CreateCompactFieldRow(smartFields.parent, "AI Advice Actions");
+            requestAiAdviceButton = AddButton(adviceActions, "稳健建议", "获取");
+            requestAiAdviceButton.onClick.AddListener(() => _ = RequestAiAdviceAsync(AiTradeAdviceMode.Conservative));
+
+            aggressiveAiAdviceButton = AddButton(adviceActions, "积极建议", "买/卖必选");
+            aggressiveAiAdviceButton.targetGraphic.color = new Color32(175, 101, 52, 255);
+            aggressiveAiAdviceButton.onClick.AddListener(() => _ = RequestAiAdviceAsync(AiTradeAdviceMode.ForcedDirectional));
 
             sbiRulesText = AddCompactInfoText(parent, "SBI规则：尚未同步。");
         }
@@ -233,25 +235,27 @@ namespace TestFXTrade.Fx.UI
 
             GameObject chartPanel = CreatePanel("ChartPanel", parent, new Color32(12, 14, 17, 255));
             LayoutElement chartLayout = chartPanel.AddComponent<LayoutElement>();
-            chartLayout.minHeight = 94;
-            chartLayout.preferredHeight = 94;
+            chartLayout.minHeight = 56;
+            chartLayout.preferredHeight = 60;
             chartLayout.flexibleWidth = 1;
-            chartLayout.flexibleHeight = 1;
+            chartLayout.flexibleHeight = 0;
             GameObject chartLine = CreateUiObject("ChartLine", chartPanel.transform);
             chartLine.AddComponent<CanvasRenderer>();
             RectTransform chartLineRect = chartLine.GetComponent<RectTransform>();
             Stretch(chartLineRect);
-            chartLineRect.offsetMin = new Vector2(12f, 12f);
-            chartLineRect.offsetMax = new Vector2(-12f, -12f);
+            chartLineRect.offsetMin = new Vector2(8f, 8f);
+            chartLineRect.offsetMax = new Vector2(-8f, -8f);
             chartGraphic = chartLine.AddComponent<UsdJpyTrendLineGraphic>();
             chartGraphic.color = Color.white;
             chartGraphic.raycastTarget = false;
 
             metricsText = AddBodyText(parent, "行情指标将在此显示。");
             recommendationText = AddBodyText(parent, "输入本金和净持仓，同步SBI规则后即可获取AI建议。");
+            recommendationText.gameObject.name = "AI Advice Text";
             LayoutElement recommendationLayout = recommendationText.GetComponent<LayoutElement>();
-            recommendationLayout.minHeight = 68;
-            recommendationLayout.preferredHeight = 68;
+            recommendationLayout.minHeight = 104;
+            recommendationLayout.preferredHeight = 108;
+            recommendationLayout.flexibleHeight = 1;
             recommendationText.fontSize = 12;
             recommendationText.color = new Color32(234, 239, 246, 255);
             warningsText = AddBodyText(parent, string.Empty);
@@ -281,10 +285,10 @@ namespace TestFXTrade.Fx.UI
 
             try
             {
-                if (string.IsNullOrWhiteSpace(marketApiKey))
+                if (string.IsNullOrWhiteSpace(relayBaseUrl))
                 {
-                    SetStatus("缺少本地 API Key。");
-                    SetWarning($"请先在 .env 中配置 {LocalFxSettings.ApiKeyVariableName}。");
+                    SetStatus("尚未配置 Azure 中转地址。");
+                    SetWarning("请检查 AzureRelayConfig.json。");
                     return;
                 }
 
@@ -341,10 +345,10 @@ namespace TestFXTrade.Fx.UI
 
             try
             {
-                if (string.IsNullOrWhiteSpace(marketApiKey))
+                if (string.IsNullOrWhiteSpace(relayBaseUrl))
                 {
-                    SetStatus("缺少本地 API Key。");
-                    SetWarning($"请先在 .env 中配置 {LocalFxSettings.ApiKeyVariableName}。");
+                    SetStatus("尚未配置 Azure 中转地址。");
+                    SetWarning("请检查 AzureRelayConfig.json。");
                     return;
                 }
 
@@ -493,7 +497,7 @@ namespace TestFXTrade.Fx.UI
             }
         }
 
-        private async Task RequestAiAdviceAsync()
+        private async Task RequestAiAdviceAsync(AiTradeAdviceMode mode)
         {
             if (aiAdviceInFlight)
             {
@@ -505,10 +509,10 @@ namespace TestFXTrade.Fx.UI
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(openAiApiKey))
+            if (string.IsNullOrWhiteSpace(relayBaseUrl) || openAiClient == null)
             {
                 SetStatus("无法请求AI建议。");
-                SetWarning($"请先在 .env 中配置 {LocalFxSettings.OpenAiApiKeyVariableName}。");
+                SetWarning("请先配置并部署 Azure 中转服务。");
                 return;
             }
 
@@ -520,7 +524,7 @@ namespace TestFXTrade.Fx.UI
             }
 
             aiAdviceInFlight = true;
-            requestAiAdviceButton.interactable = false;
+            SetAdviceButtonsInteractable(false);
             CancellationToken token = GetAdvisoryToken();
 
             try
@@ -547,14 +551,16 @@ namespace TestFXTrade.Fx.UI
                     latestQuote,
                     realtimeCandles,
                     GetSelectedInterval(),
-                    sbiRules);
+                    sbiRules,
+                    mode);
 
-                recommendationText.text = "OpenAI正在结合实时行情、技术指标和SBI保证金规则进行分析……";
-                SetStatus($"正在请求 OpenAI {OpenAiTradeAdvisorClient.DefaultModel}……");
-                OpenAiTradeAdvice advice = await openAiClient.GetAdviceAsync(prompt, token);
-                bool adjusted = ApplyLocalMarginGuard(advice, principalJpy, netPositionLots, sbiRules);
-                RenderAiAdvice(advice, principalJpy, netPositionLots, adjusted);
-                SetStatus($"AI建议已更新：{DateTime.Now:HH:mm:ss}");
+                string modeLabel = mode == AiTradeAdviceMode.ForcedDirectional ? "积极策略" : "稳健策略";
+                recommendationText.text = $"OpenAI正在按{modeLabel}结合实时行情、技术指标和SBI保证金规则进行分析……";
+                SetStatus($"正在通过 Azure 请求 OpenAI（{modeLabel}）……");
+                OpenAiTradeAdvice advice = await openAiClient.GetAdviceAsync(prompt, mode, token);
+                bool adjusted = ApplyLocalMarginGuard(advice, principalJpy, netPositionLots, sbiRules, mode);
+                RenderAiAdvice(advice, principalJpy, netPositionLots, adjusted, mode);
+                SetStatus($"{modeLabel}已更新：{DateTime.Now:HH:mm:ss}");
             }
             catch (OperationCanceledException)
             {
@@ -569,10 +575,20 @@ namespace TestFXTrade.Fx.UI
             finally
             {
                 aiAdviceInFlight = false;
-                if (requestAiAdviceButton != null)
-                {
-                    requestAiAdviceButton.interactable = true;
-                }
+                SetAdviceButtonsInteractable(true);
+            }
+        }
+
+        private void SetAdviceButtonsInteractable(bool interactable)
+        {
+            if (requestAiAdviceButton != null)
+            {
+                requestAiAdviceButton.interactable = interactable;
+            }
+
+            if (aggressiveAiAdviceButton != null)
+            {
+                aggressiveAiAdviceButton.interactable = interactable;
             }
         }
 
@@ -609,34 +625,53 @@ namespace TestFXTrade.Fx.UI
             OpenAiTradeAdvice advice,
             double principalJpy,
             double netPositionLots,
-            SbiFxRuleSnapshot rules)
+            SbiFxRuleSnapshot rules,
+            AiTradeAdviceMode mode)
         {
             if (advice == null || rules == null || rules.RequiredMarginPerStandardLotJpy <= 0d)
             {
                 return false;
             }
 
+            string originalAction = advice.action;
             double originalLots = advice.suggested_lots;
-            double maxGrossLots = (principalJpy * 0.5d) / rules.RequiredMarginPerStandardLotJpy;
-            double maxOrderLots;
+            double marginLimitRatio = OpenAiTradePromptBuilder.GetMarginLimitRatio(mode);
+            double maxGrossLots = (principalJpy * marginLimitRatio) / rules.RequiredMarginPerStandardLotJpy;
+            double maximumBuyOrderLots = Math.Max(0d, maxGrossLots - netPositionLots);
+            double maximumSellOrderLots = Math.Max(0d, maxGrossLots + netPositionLots);
+            double minimumLotStep = Math.Max(0.001d, rules.MinimumOrderUnits / FxConstants.StandardLotBaseUnits);
+            double maxOrderLots = GetMaximumOrderLots(advice.action, maximumBuyOrderLots, maximumSellOrderLots);
+            bool directionChanged = false;
 
-            if (string.Equals(advice.action, "BUY", StringComparison.Ordinal))
+            if (mode == AiTradeAdviceMode.ForcedDirectional && maxOrderLots < minimumLotStep)
             {
-                maxOrderLots = Math.Max(0d, maxGrossLots - netPositionLots);
+                string alternateAction = string.Equals(advice.action, "BUY", StringComparison.Ordinal) ? "SELL" : "BUY";
+                double alternateMaximum = GetMaximumOrderLots(alternateAction, maximumBuyOrderLots, maximumSellOrderLots);
+                if (alternateMaximum >= minimumLotStep)
+                {
+                    advice.action = alternateAction;
+                    maxOrderLots = alternateMaximum;
+                    directionChanged = true;
+                    advice.summary = "原方向超出保证金限制，改为反向小额交易";
+                    advice.reasoning = "模型原方向在本地保证金上限下不可执行，因此选择可执行的反方向最小单。";
+                }
             }
-            else if (string.Equals(advice.action, "SELL", StringComparison.Ordinal))
-            {
-                maxOrderLots = Math.Max(0d, maxGrossLots + netPositionLots);
-            }
-            else
+
+            if (!string.Equals(advice.action, "BUY", StringComparison.Ordinal) &&
+                !string.Equals(advice.action, "SELL", StringComparison.Ordinal))
             {
                 advice.action = "HOLD";
                 advice.suggested_lots = 0d;
                 return originalLots != 0d;
             }
 
-            double minimumLotStep = Math.Max(0.001d, rules.MinimumOrderUnits / FxConstants.StandardLotBaseUnits);
-            double guardedLots = Math.Min(Math.Max(0d, advice.suggested_lots), maxOrderLots);
+            double requestedLots = directionChanged ? minimumLotStep : Math.Max(0d, advice.suggested_lots);
+            if (mode == AiTradeAdviceMode.ForcedDirectional && requestedLots < minimumLotStep && maxOrderLots >= minimumLotStep)
+            {
+                requestedLots = minimumLotStep;
+            }
+
+            double guardedLots = Math.Min(requestedLots, maxOrderLots);
             guardedLots = Math.Floor((guardedLots + 0.0000001d) / minimumLotStep) * minimumLotStep;
 
             if (guardedLots < minimumLotStep)
@@ -646,18 +681,40 @@ namespace TestFXTrade.Fx.UI
             }
 
             advice.suggested_lots = guardedLots;
-            bool adjusted = Math.Abs(originalLots - guardedLots) > 0.0000001d;
+            bool adjusted = directionChanged ||
+                !string.Equals(originalAction, advice.action, StringComparison.Ordinal) ||
+                Math.Abs(originalLots - guardedLots) > 0.0000001d;
             if (adjusted)
             {
                 advice.risk_warning = string.IsNullOrWhiteSpace(advice.risk_warning)
-                    ? "建议手数已由本地保证金保护规则下调。"
-                    : advice.risk_warning + " 本地保证金保护规则已下调建议手数。";
+                    ? "建议方向或手数已由本地保证金保护规则调整。"
+                    : advice.risk_warning + " 本地保证金保护规则已调整建议方向或手数。";
             }
 
             return adjusted;
         }
 
-        private void RenderAiAdvice(OpenAiTradeAdvice advice, double principalJpy, double currentNetLots, bool adjusted)
+        private static double GetMaximumOrderLots(string action, double maximumBuyOrderLots, double maximumSellOrderLots)
+        {
+            if (string.Equals(action, "BUY", StringComparison.Ordinal))
+            {
+                return maximumBuyOrderLots;
+            }
+
+            if (string.Equals(action, "SELL", StringComparison.Ordinal))
+            {
+                return maximumSellOrderLots;
+            }
+
+            return 0d;
+        }
+
+        private void RenderAiAdvice(
+            OpenAiTradeAdvice advice,
+            double principalJpy,
+            double currentNetLots,
+            bool adjusted,
+            AiTradeAdviceMode mode)
         {
             string actionLabel;
             double postTradeNetLots = currentNetLots;
@@ -678,14 +735,18 @@ namespace TestFXTrade.Fx.UI
 
             double postTradeMargin = Math.Abs(postTradeNetLots) * sbiRules.RequiredMarginPerStandardLotJpy;
             double marginUsagePercent = principalJpy > 0d ? (postTradeMargin / principalJpy) * 100d : 0d;
+            string modeLabel = mode == AiTradeAdviceMode.ForcedDirectional ? "积极建议" : "稳健建议";
             StringBuilder adviceText = new StringBuilder();
-            adviceText.AppendLine($"AI建议：{actionLabel} {advice.suggested_lots:0.###} lot   置信度 {advice.confidence:P0}");
+            adviceText.AppendLine($"{modeLabel}：{actionLabel} {advice.suggested_lots:0.###} lot   置信度 {advice.confidence:P0}");
             adviceText.AppendLine(advice.summary);
             adviceText.Append($"依据：{advice.reasoning}");
             recommendationText.text = adviceText.ToString();
 
             string adjustedText = adjusted ? " 已执行本地手数保护。" : string.Empty;
-            SetWarning($"{advice.risk_warning} 预计交易后保证金占本金 {marginUsagePercent:0.0}%。{adjustedText} AI建议仅供参考，不构成投资建议。");
+            string forcedDirectionWarning = mode == AiTradeAdviceMode.ForcedDirectional
+                ? " 积极模式会强制选择方向，不代表信号充分。"
+                : string.Empty;
+            SetWarning($"{advice.risk_warning} 预计交易后保证金占本金 {marginUsagePercent:0.0}%。{adjustedText}{forcedDirectionWarning} AI建议仅供参考，不构成投资建议。");
         }
 
         private void RenderSbiRuleState()
@@ -731,7 +792,7 @@ namespace TestFXTrade.Fx.UI
         {
             if (marketDataProvider == null)
             {
-                marketDataProvider = new TwelveDataMarketDataProvider(marketApiKey);
+                marketDataProvider = new AzureRelayMarketDataProvider(relayBaseUrl);
             }
 
             return marketDataProvider;
@@ -748,23 +809,24 @@ namespace TestFXTrade.Fx.UI
             return intervalDropdown.options[index].text;
         }
 
-        private static string LocalizeSourceLabel(string sourceLabel)
+        private static string LocalizeRelaySource(string sourceLabel)
         {
             switch (sourceLabel)
             {
                 case "environment variable":
                     return "环境变量";
-                case "project .env":
-                    return "项目 .env";
-                case "current directory .env":
-                    return "当前目录 .env";
-                case "persistent .env":
-                    return "持久化目录 .env";
-                case "local .env":
-                    return "本地 .env";
+                case "Resources/AzureRelayConfig.json":
+                    return "应用配置";
                 default:
                     return sourceLabel;
             }
+        }
+
+        private void RenderRelayState(string sourceLabel)
+        {
+            marketSourceText.text = string.IsNullOrWhiteSpace(relayBaseUrl)
+                ? "行情与AI：尚未配置 Azure 中转"
+                : $"行情与AI：Azure后台中转（{LocalizeRelaySource(sourceLabel)}）";
         }
 
         private void CancelMarketDataRequests()
