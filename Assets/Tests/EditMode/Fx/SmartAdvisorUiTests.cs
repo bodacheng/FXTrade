@@ -10,6 +10,21 @@ namespace TestFXTrade.Tests.EditMode.Fx
     public sealed class SmartAdvisorUiTests
     {
         [Test]
+        public void ChineseUiFontCandidatesIncludeIosPostScriptNames()
+        {
+            FieldInfo field = typeof(FxTradeAdvisorApp).GetField(
+                "ChineseFontNames",
+                BindingFlags.Static | BindingFlags.NonPublic);
+
+            Assert.NotNull(field);
+            string[] fontNames = (string[])field.GetValue(null);
+            Assert.Contains("PingFangSC-Regular", fontNames);
+            Assert.Contains("PingFangSC-Medium", fontNames);
+            Assert.Contains("HeitiSC-Light", fontNames);
+            Assert.Contains("STHeitiSC-Light", fontNames);
+        }
+
+        [Test]
         public void PortraitAdvisorHasTwoInputsAndFitsReferenceHeightWithoutPageScroll()
         {
             EventSystem existingEventSystem = Object.FindAnyObjectByType<EventSystem>();

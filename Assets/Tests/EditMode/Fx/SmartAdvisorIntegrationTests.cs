@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using NUnit.Framework;
 using TestFXTrade.Fx.Domain;
@@ -35,6 +36,48 @@ namespace TestFXTrade.Tests.EditMode.Fx
             Assert.AreEqual(64982, snapshot.RequiredMarginPer10000Jpy);
             Assert.AreEqual(100, snapshot.MinimumOrderUnits);
             Assert.AreEqual(649820d, snapshot.RequiredMarginPerStandardLotJpy);
+        }
+
+        [Test]
+        public void ParsesWindows31JOfficialSbiUsdJpyMarginSnapshotBytes()
+        {
+            SbiFxRuleSnapshot snapshot = SbiFxRuleService.ParseOfficialPage(
+                BuildWindows31JOfficialHtmlBytes(),
+                new DateTime(2026, 7, 15, 0, 0, 0, DateTimeKind.Utc));
+
+            Assert.AreEqual("2026/7/15", snapshot.ApplicableDate);
+            Assert.AreEqual(25, snapshot.Leverage);
+            Assert.AreEqual(4d, snapshot.MarginRatePercent);
+            Assert.AreEqual(64898, snapshot.RequiredMarginPer10000Jpy);
+            Assert.AreEqual(100, snapshot.MinimumOrderUnits);
+            Assert.AreEqual(648980d, snapshot.RequiredMarginPerStandardLotJpy);
+        }
+
+        [Test]
+        public void SavesAndLoadsSbiSnapshotFromExplicitCachePath()
+        {
+            string tempRoot = Path.Combine(Path.GetTempPath(), "FXTrade-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                string cachePath = Path.Combine(tempRoot, "Library", "sbi_fx_rules.json");
+                SbiFxRuleService service = new SbiFxRuleService(cachePath);
+
+                service.SaveLocal(BuildRules());
+                SbiFxRuleSnapshot loaded = service.LoadLocal();
+
+                Assert.IsTrue(File.Exists(cachePath));
+                Assert.NotNull(loaded);
+                Assert.AreEqual("USD/JPY", loaded.Pair);
+                Assert.AreEqual(64982, loaded.RequiredMarginPer10000Jpy);
+                Assert.AreEqual(100, loaded.MinimumOrderUnits);
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot))
+                {
+                    Directory.Delete(tempRoot, true);
+                }
+            }
         }
 
         [Test]
@@ -213,6 +256,50 @@ namespace TestFXTrade.Tests.EditMode.Fx
             }
 
             return candles;
+        }
+
+        private static byte[] BuildWindows31JOfficialHtmlBytes()
+        {
+            List<byte> bytes = new List<byte>();
+            AppendAscii(bytes, "<div>(2026/7/15");
+            AppendBytes(bytes, 0x93, 0x4B, 0x97, 0x70, 0x95, 0xAA);
+            AppendAscii(bytes, ":1");
+            AppendBytes(bytes, 0x96, 0x9C, 0x92, 0xCA, 0x89, 0xDD);
+            AppendAscii(bytes, "</div><li><div>");
+            AppendBytes(bytes, 0x95, 0xC4, 0x83, 0x68, 0x83, 0x8B, 0x2F, 0x93, 0xFA, 0x96, 0x7B, 0x89, 0x7E);
+            AppendAscii(bytes, "</div><div data-label=\"");
+            AppendBytes(bytes, 0x83, 0x8C, 0x83, 0x6F, 0x83, 0x8C, 0x83, 0x62, 0x83, 0x57, 0x32, 0x35, 0x94, 0x7B);
+            AppendAscii(bytes, "\">64,898</div></li><li>");
+            AppendBytes(bytes, 0x83, 0x8C, 0x83, 0x6F, 0x83, 0x8C, 0x83, 0x62, 0x83, 0x57, 0x32, 0x35, 0x94, 0x7B, 0x83, 0x52, 0x81, 0x5B, 0x83, 0x58);
+            AppendAscii(bytes, "10</li><p>");
+            AppendBytes(bytes, 0x83, 0x8C, 0x83, 0x6F, 0x83, 0x8C, 0x83, 0x62, 0x83, 0x57, 0x32, 0x35, 0x94, 0x7B, 0x83, 0x52, 0x81, 0x5B, 0x83, 0x58);
+            AppendBytes(bytes, 0x81, 0x46);
+            AppendAscii(bytes, "4");
+            AppendBytes(bytes, 0x81, 0x93);
+            AppendAscii(bytes, "</p><p>(SBI");
+            AppendBytes(bytes, 0x81, 0x40);
+            AppendAscii(bytes, "FX)");
+            AppendBytes(bytes, 0x82, 0xCD);
+            AppendAscii(bytes, "100");
+            AppendBytes(bytes, 0x92, 0xCA, 0x89, 0xDD, 0x82, 0xA9, 0x82, 0xE7);
+            AppendAscii(bytes, "</p>");
+            return bytes.ToArray();
+        }
+
+        private static void AppendAscii(List<byte> bytes, string text)
+        {
+            foreach (char character in text)
+            {
+                bytes.Add((byte)character);
+            }
+        }
+
+        private static void AppendBytes(List<byte> bytes, params int[] values)
+        {
+            foreach (int value in values)
+            {
+                bytes.Add((byte)value);
+            }
         }
     }
 }

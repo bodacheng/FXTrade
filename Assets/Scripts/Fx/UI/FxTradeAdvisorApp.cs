@@ -21,12 +21,25 @@ namespace TestFXTrade.Fx.UI
         private const float QuoteRefreshSeconds = 5f;
         private const float CandleRefreshSeconds = 60f;
         private const int CandleOutputSize = 160;
+        private const int DynamicFontSize = 16;
+        private const float CjkLineSpacing = 1.15f;
+        private const string ChineseFontProbeText = "中文交易建议保证金行情规则买卖";
         private static readonly Vector2 MobileReferenceResolution = new Vector2(390f, 844f);
         private static readonly string[] ChineseFontNames =
         {
+            "PingFangSC-Regular",
+            "PingFangSC-Medium",
+            "PingFangSC-Semibold",
             "PingFang SC",
+            ".PingFang SC",
+            "HeitiSC-Light",
+            "HeitiSC-Medium",
             "Heiti SC",
             "STHeiti",
+            "STHeitiSC-Light",
+            "STHeitiSC-Medium",
+            "HiraginoSansGB-W3",
+            "Hiragino Sans GB",
             "Noto Sans CJK SC",
             "Noto Sans SC",
             "Microsoft YaHei",
@@ -91,18 +104,7 @@ namespace TestFXTrade.Fx.UI
         private void Awake()
         {
             ConfigurePortraitRuntime();
-
-            font = Font.CreateDynamicFontFromOSFont(ChineseFontNames, 16);
-            if (font == null)
-            {
-                font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            }
-
-            if (font == null)
-            {
-                font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            }
-
+            font = CreateChineseUiFont();
             BuildUi();
         }
 
@@ -1139,8 +1141,8 @@ namespace TestFXTrade.Fx.UI
         {
             Text label = AddText(parent, text, 22, FontStyle.Bold, new Color32(244, 247, 251, 255));
             LayoutElement layout = label.gameObject.AddComponent<LayoutElement>();
-            layout.minHeight = 28;
-            layout.preferredHeight = 28;
+            layout.minHeight = 32;
+            layout.preferredHeight = 32;
             return label;
         }
 
@@ -1153,8 +1155,8 @@ namespace TestFXTrade.Fx.UI
             label.resizeTextMinSize = 10;
             label.resizeTextMaxSize = 15;
             LayoutElement layout = label.gameObject.AddComponent<LayoutElement>();
-            layout.minHeight = 30;
-            layout.preferredHeight = 30;
+            layout.minHeight = 36;
+            layout.preferredHeight = 36;
             return label;
         }
 
@@ -1179,8 +1181,8 @@ namespace TestFXTrade.Fx.UI
         {
             Text label = AddText(parent, text, 13, FontStyle.Bold, new Color32(123, 217, 171, 255));
             LayoutElement layout = label.gameObject.AddComponent<LayoutElement>();
-            layout.minHeight = 16;
-            layout.preferredHeight = 16;
+            layout.minHeight = 18;
+            layout.preferredHeight = 18;
             return label;
         }
 
@@ -1192,8 +1194,8 @@ namespace TestFXTrade.Fx.UI
             label.resizeTextMinSize = 8;
             label.resizeTextMaxSize = 11;
             LayoutElement layout = label.gameObject.AddComponent<LayoutElement>();
-            layout.minHeight = 15;
-            layout.preferredHeight = 15;
+            layout.minHeight = 18;
+            layout.preferredHeight = 18;
             return label;
         }
 
@@ -1206,8 +1208,8 @@ namespace TestFXTrade.Fx.UI
             label.resizeTextMinSize = 8;
             label.resizeTextMaxSize = 12;
             LayoutElement layout = label.gameObject.AddComponent<LayoutElement>();
-            layout.minHeight = 34;
-            layout.preferredHeight = 34;
+            layout.minHeight = 42;
+            layout.preferredHeight = 42;
             layout.flexibleWidth = 1;
             return label;
         }
@@ -1216,8 +1218,8 @@ namespace TestFXTrade.Fx.UI
         {
             GameObject section = CreateUiObject(title + " Section", parent);
             LayoutElement sectionLayout = section.AddComponent<LayoutElement>();
-            sectionLayout.minHeight = 63;
-            sectionLayout.preferredHeight = 63;
+            sectionLayout.minHeight = 68;
+            sectionLayout.preferredHeight = 68;
 
             VerticalLayoutGroup sectionGroup = section.AddComponent<VerticalLayoutGroup>();
             sectionGroup.spacing = 2;
@@ -1234,8 +1236,8 @@ namespace TestFXTrade.Fx.UI
         {
             GameObject row = CreateUiObject(name, parent);
             LayoutElement rowLayout = row.AddComponent<LayoutElement>();
-            rowLayout.minHeight = 45;
-            rowLayout.preferredHeight = 45;
+            rowLayout.minHeight = 48;
+            rowLayout.preferredHeight = 48;
 
             HorizontalLayoutGroup group = row.AddComponent<HorizontalLayoutGroup>();
             group.spacing = 4;
@@ -1270,9 +1272,54 @@ namespace TestFXTrade.Fx.UI
             labelText.resizeTextMinSize = 8;
             labelText.resizeTextMaxSize = 10;
             LayoutElement labelLayout = labelText.gameObject.AddComponent<LayoutElement>();
-            labelLayout.minHeight = 12;
-            labelLayout.preferredHeight = 12;
+            labelLayout.minHeight = 15;
+            labelLayout.preferredHeight = 15;
             return labelText;
+        }
+
+        private static Font CreateChineseUiFont()
+        {
+            for (int i = 0; i < ChineseFontNames.Length; i++)
+            {
+                Font candidate = Font.CreateDynamicFontFromOSFont(ChineseFontNames[i], DynamicFontSize);
+                if (CanRenderChinese(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            Font combinedCandidate = Font.CreateDynamicFontFromOSFont(ChineseFontNames, DynamicFontSize);
+            if (CanRenderChinese(combinedCandidate))
+            {
+                return combinedCandidate;
+            }
+
+            Font legacyFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (legacyFont != null)
+            {
+                return legacyFont;
+            }
+
+            return Resources.GetBuiltinResource<Font>("Arial.ttf");
+        }
+
+        private static bool CanRenderChinese(Font candidate)
+        {
+            if (candidate == null)
+            {
+                return false;
+            }
+
+            candidate.RequestCharactersInTexture(ChineseFontProbeText, DynamicFontSize, FontStyle.Normal);
+            for (int i = 0; i < ChineseFontProbeText.Length; i++)
+            {
+                if (!candidate.HasCharacter(ChineseFontProbeText[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private Text AddText(Transform parent, string value, int size, FontStyle style, Color32 color)
@@ -1287,7 +1334,7 @@ namespace TestFXTrade.Fx.UI
             text.alignment = TextAnchor.MiddleLeft;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
             text.verticalOverflow = VerticalWrapMode.Overflow;
-            text.lineSpacing = 1.05f;
+            text.lineSpacing = CjkLineSpacing;
             return text;
         }
 

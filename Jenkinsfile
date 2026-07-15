@@ -102,7 +102,7 @@ pipeline {
                 sh '''#!/bin/bash
 set -euo pipefail
 
-if [[ ! "$APP_VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+if [[ ! "$APP_VERSION" =~ ^[0-9]+([.][0-9]+){0,2}$ ]]; then
     echo "APP_VERSION must contain one to three numeric components: $APP_VERSION" >&2
     exit 2
 fi
