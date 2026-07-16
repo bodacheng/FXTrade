@@ -463,6 +463,38 @@ MonoBehaviour:
     m_Key: button_language_settings
     m_Metadata:
       m_Items: []
+  - m_Id: 3094339658
+    m_Key: advice_window_title
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339659
+    m_Key: advice_button_empty
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339660
+    m_Key: advice_button_just_now
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339661
+    m_Key: advice_button_minutes_ago
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339662
+    m_Key: advice_button_hours_ago
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339663
+    m_Key: advice_button_days_ago
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339664
+    m_Key: advice_window_generated_meta
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339665
+    m_Key: advice_window_body
+    m_Metadata:
+      m_Items: []
   m_Metadata:
     m_Items: []
   m_KeyGenerator:

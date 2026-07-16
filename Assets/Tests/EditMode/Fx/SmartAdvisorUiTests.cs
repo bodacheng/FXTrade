@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
 using TestFXTrade.Fx.Domain;
+using TestFXTrade.Fx.OpenAI;
+using TestFXTrade.Fx.Sbi;
 using TestFXTrade.Fx.UI;
 using TMPro;
 using UnityEditor;
@@ -44,7 +46,8 @@ namespace TestFXTrade.Tests.EditMode.Fx
             Assert.NotNull(pagePrefab.transform.Find("Root/Safe Area Content/Market Overview Card"));
             Assert.NotNull(pagePrefab.transform.Find("Root/Safe Area Content/Advisor Setup Card"));
             Assert.NotNull(pagePrefab.transform.Find("Root/Safe Area Content/Market Insight Card/ChartPanel/ChartLine"));
-            Assert.NotNull(pagePrefab.transform.Find("Root/Safe Area Content/Advice Card/AI Advice Text"));
+            Assert.NotNull(pagePrefab.transform.Find("Root/Safe Area Content/Advice Access Card/Advice Result Button"));
+            Assert.IsNull(pagePrefab.transform.Find("Root/Safe Area Content/Advice Card"));
             Assert.NotNull(pagePrefab.transform.Find("Root/Safe Area Content/Warning Card"));
             Assert.NotNull(pagePrefab.transform.Find("Root/Safe Area Content/Header Card/Header Bar/Header Actions/Loading Indicator"));
             Transform prefabSettingsButton = pagePrefab.transform.Find(
@@ -69,10 +72,12 @@ namespace TestFXTrade.Tests.EditMode.Fx
             Assert.IsNull(pagePrefab.transform.Find("Root/Settings Window"));
             Assert.IsNull(pagePrefab.transform.Find("Root/Language Window"));
             Assert.IsNull(pagePrefab.transform.Find("Root/Usage Guide Window"));
+            Assert.IsNull(pagePrefab.transform.Find("Root/Advice Window"));
 
             AssetReferenceGameObject settingsReference = GetAssetReference(app, "settingsWindowPrefab");
             AssetReferenceGameObject languageReference = GetAssetReference(app, "languageWindowPrefab");
             AssetReferenceGameObject guideReference = GetAssetReference(app, "usageGuideWindowPrefab");
+            AssetReferenceGameObject adviceReference = GetAssetReference(app, "adviceWindowPrefab");
             Assert.AreEqual(
                 "Assets/UI/Addressable/FxTradeSettingsWindow.prefab",
                 AssetDatabase.GUIDToAssetPath(settingsReference.AssetGUID));
@@ -82,6 +87,9 @@ namespace TestFXTrade.Tests.EditMode.Fx
             Assert.AreEqual(
                 "Assets/UI/Addressable/FxTradeUsageGuideWindow.prefab",
                 AssetDatabase.GUIDToAssetPath(guideReference.AssetGUID));
+            Assert.AreEqual(
+                "Assets/UI/Addressable/FxTradeAdviceWindow.prefab",
+                AssetDatabase.GUIDToAssetPath(adviceReference.AssetGUID));
 
             GameObject settingsPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
                 "Assets/UI/Addressable/FxTradeSettingsWindow.prefab");
@@ -89,9 +97,12 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 "Assets/UI/Addressable/FxTradeLanguageWindow.prefab");
             GameObject guidePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
                 "Assets/UI/Addressable/FxTradeUsageGuideWindow.prefab");
+            GameObject advicePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/UI/Addressable/FxTradeAdviceWindow.prefab");
             Assert.NotNull(settingsPrefab);
             Assert.NotNull(languagePrefab);
             Assert.NotNull(guidePrefab);
+            Assert.NotNull(advicePrefab);
             Assert.NotNull(settingsPrefab.GetComponent<FxTradeSettingsWindow>());
             Assert.NotNull(settingsPrefab.transform.Find("Settings Panel/Language Settings Button"));
             Assert.IsNull(settingsPrefab.transform.Find("Settings Panel/Usage Guide Button"));
@@ -107,6 +118,12 @@ namespace TestFXTrade.Tests.EditMode.Fx
             Transform usageGuideBody = usageGuideScrollView.Find("Viewport/Content/Usage Guide Body");
             Assert.NotNull(usageGuideBody);
             Assert.That(usageGuideBody.GetComponent<TMP_Text>().text, Does.Contain("AzureRelayConfig.json"));
+            Assert.NotNull(advicePrefab.GetComponent<FxTradeAdviceWindow>());
+            Assert.NotNull(advicePrefab.transform.Find("Advice Page/Advice Header/Close Button"));
+            Transform adviceScrollView = advicePrefab.transform.Find("Advice Page/Advice Scroll View");
+            Assert.NotNull(adviceScrollView);
+            Assert.NotNull(adviceScrollView.GetComponent<ScrollRect>());
+            Assert.NotNull(adviceScrollView.Find("Viewport/Content/Advice Body"));
 
             AddressableAssetSettings addressableSettings = AddressableAssetSettingsDefaultObject.Settings;
             AddressableAssetGroup uiGroup = addressableSettings.FindGroup("FX Trade UI");
@@ -114,6 +131,7 @@ namespace TestFXTrade.Tests.EditMode.Fx
             AssertAddressableEntry(addressableSettings, settingsReference, FxTradeAdvisorApp.SettingsWindowAddress);
             AssertAddressableEntry(addressableSettings, languageReference, FxTradeAdvisorApp.LanguageWindowAddress);
             AssertAddressableEntry(addressableSettings, guideReference, FxTradeAdvisorApp.UsageGuideWindowAddress);
+            AssertAddressableEntry(addressableSettings, adviceReference, FxTradeAdvisorApp.AdviceWindowAddress);
 
             Scene scene = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
 
@@ -206,6 +224,8 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 "Assets/UI/Addressable/FxTradeLanguageWindow.prefab");
             GameObject guidePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
                 "Assets/UI/Addressable/FxTradeUsageGuideWindow.prefab");
+            GameObject advicePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/UI/Addressable/FxTradeAdviceWindow.prefab");
 
             GameObject settingsInstance = UnityEngine.Object.Instantiate(settingsPrefab);
             bool languageRequested = false;
@@ -240,6 +260,20 @@ namespace TestFXTrade.Tests.EditMode.Fx
             Assert.IsTrue(guideBackRequested);
             UnityEngine.Object.DestroyImmediate(guideInstance);
             Assert.IsTrue(guideInstance == null);
+
+            GameObject adviceInstance = UnityEngine.Object.Instantiate(advicePrefab);
+            bool adviceCloseRequested = false;
+            FxTradeAdviceWindow adviceWindow = adviceInstance.GetComponent<FxTradeAdviceWindow>();
+            adviceWindow.Initialize(
+                "测试建议正文",
+                "稳健建议 · 生成于 2026-07-16 18:42",
+                () => adviceCloseRequested = true);
+            Assert.AreEqual("测试建议正文", adviceWindow.BodyText.text);
+            Assert.That(adviceWindow.GeneratedAtText.text, Does.Contain("2026-07-16 18:42"));
+            adviceInstance.transform.Find("Advice Page/Advice Header/Close Button").GetComponent<Button>().onClick.Invoke();
+            Assert.IsTrue(adviceCloseRequested);
+            UnityEngine.Object.DestroyImmediate(adviceInstance);
+            Assert.IsTrue(adviceInstance == null);
         }
 
         [Test]
@@ -306,7 +340,7 @@ namespace TestFXTrade.Tests.EditMode.Fx
 
                 Assert.IsTrue(hasPositionQuantityLabel);
                 Button[] buttons = canvasObject.GetComponentsInChildren<Button>(true);
-                Assert.AreEqual(6, buttons.Length);
+                Assert.AreEqual(7, buttons.Length);
 
                 Transform safeArea = canvasObject.transform.Find("Root/Safe Area Content");
                 Assert.NotNull(safeArea);
@@ -318,6 +352,13 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 Assert.IsNull(canvasObject.transform.Find("Root/Settings Window"));
                 Assert.IsNull(canvasObject.transform.Find("Root/Language Window"));
                 Assert.IsNull(canvasObject.transform.Find("Root/Usage Guide Window"));
+                Assert.IsNull(canvasObject.transform.Find("Root/Advice Window"));
+                Transform adviceResultButton = safeArea.Find("Advice Access Card/Advice Result Button");
+                Assert.NotNull(adviceResultButton);
+                Assert.IsFalse(adviceResultButton.GetComponent<Button>().interactable);
+                Assert.That(
+                    adviceResultButton.Find("Advice Result Button Text").GetComponent<TMP_Text>().text,
+                    Does.Contain("暂无"));
 
                 accountInputs[0].SetTextWithoutNotify("1,000,000");
                 accountInputs[1].SetTextWithoutNotify("-10,000");
@@ -355,6 +396,75 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 Assert.That(normalized, Does.Contain("建玉数量 1,000 通貨"));
                 Assert.That(normalized, Does.Not.Contain("lot"));
                 Assert.That(normalized, Does.Not.Contain("手数"));
+
+                MethodInfo formatAdviceAgeLabel = typeof(FxTradeAdvisorApp).GetMethod(
+                    "FormatAdviceAgeLabel",
+                    BindingFlags.Static | BindingFlags.NonPublic);
+                Assert.NotNull(formatAdviceAgeLabel);
+                DateTime generatedAt = new DateTime(2026, 7, 16, 18, 0, 0);
+                Assert.AreEqual(
+                    "查看建议 · 刚刚",
+                    formatAdviceAgeLabel.Invoke(null, new object[] { generatedAt, generatedAt.AddSeconds(20) }));
+                Assert.AreEqual(
+                    "查看建议 · 3 分钟前",
+                    formatAdviceAgeLabel.Invoke(null, new object[] { generatedAt, generatedAt.AddMinutes(3) }));
+                Assert.AreEqual(
+                    "查看建议 · 2 小时前",
+                    formatAdviceAgeLabel.Invoke(null, new object[] { generatedAt, generatedAt.AddHours(2) }));
+
+                FieldInfo rulesField = typeof(FxTradeAdvisorApp).GetField(
+                    "sbiRules",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                FieldInfo generatedAtField = typeof(FxTradeAdvisorApp).GetField(
+                    "lastAdviceGeneratedAt",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.NotNull(rulesField);
+                Assert.NotNull(generatedAtField);
+                rulesField.SetValue(
+                    app,
+                    new SbiFxRuleSnapshot
+                    {
+                        SourceUrl = "https://example.test/sbi",
+                        Pair = "USD/JPY",
+                        Leverage = 25,
+                        MarginRatePercent = 4d,
+                        RequiredMarginPer10000Jpy = 64000,
+                        MinimumOrderUnits = 1000
+                    });
+                generatedAtField.SetValue(app, DateTime.Now);
+                MethodInfo renderAiAdvice = typeof(FxTradeAdvisorApp).GetMethod(
+                    "RenderAiAdvice",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.NotNull(renderAiAdvice);
+                renderAiAdvice.Invoke(
+                    app,
+                    new object[]
+                    {
+                        new OpenAiTradeAdvice
+                        {
+                            action = "BUY",
+                            suggested_lots = 0.01d,
+                            confidence = 0.78d,
+                            summary = "短期趋势转强",
+                            reasoning = "价格站上短期均线",
+                            risk_warning = "注意回撤风险"
+                        },
+                        1000000d,
+                        0d,
+                        false,
+                        AiTradeAdviceMode.Conservative
+                    });
+                Assert.IsTrue(adviceResultButton.GetComponent<Button>().interactable);
+                Assert.That(
+                    adviceResultButton.Find("Advice Result Button Text").GetComponent<TMP_Text>().text,
+                    Does.Contain("刚刚"));
+                FieldInfo latestAdviceDisplayTextField = typeof(FxTradeAdvisorApp).GetField(
+                    "latestAdviceDisplayText",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.NotNull(latestAdviceDisplayTextField);
+                string latestAdviceDisplayText = (string)latestAdviceDisplayTextField.GetValue(app);
+                Assert.That(latestAdviceDisplayText, Does.Contain("短期趋势转强"));
+                Assert.That(latestAdviceDisplayText, Does.Contain("风险提示"));
 
                 Transform loadingIndicator = canvasObject.transform.Find(
                     "Root/Safe Area Content/Header Card/Header Bar/Header Actions/Loading Indicator");
@@ -406,15 +516,12 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 Assert.LessOrEqual(preferredHeight, 844f);
 
                 Transform chartPanel = safeArea.Find("Market Insight Card/ChartPanel");
-                Transform adviceText = safeArea.Find("Advice Card/AI Advice Text");
                 Assert.NotNull(chartPanel);
-                Assert.NotNull(adviceText);
+                Assert.IsNull(safeArea.Find("Advice Card"));
 
                 LayoutElement chartLayout = chartPanel.GetComponent<LayoutElement>();
-                LayoutElement adviceLayout = adviceText.GetComponent<LayoutElement>();
-                Assert.Less(chartLayout.preferredHeight, adviceLayout.preferredHeight);
+                Assert.GreaterOrEqual(chartLayout.preferredHeight, 190f);
                 Assert.AreEqual(0f, chartLayout.flexibleHeight);
-                Assert.Greater(adviceLayout.flexibleHeight, 0f);
             }
             finally
             {
@@ -468,6 +575,15 @@ namespace TestFXTrade.Tests.EditMode.Fx
             Assert.AreEqual(
                 "Language Settings",
                 LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "button_language_settings", english));
+            Assert.AreEqual(
+                "AI Trade Advice",
+                LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "advice_window_title", english));
+            Assert.AreEqual(
+                "AI取引提案",
+                LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "advice_window_title", japanese));
+            Assert.AreEqual(
+                "暂无 AI 建议",
+                LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "advice_button_empty", chinese));
             Assert.AreEqual(
                 "戻る",
                 LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "button_back", japanese));

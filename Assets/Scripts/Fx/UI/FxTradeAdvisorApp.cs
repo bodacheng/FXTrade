@@ -24,12 +24,14 @@ namespace TestFXTrade.Fx.UI
     {
         private const float QuoteRefreshSeconds = 5f;
         private const float CandleRefreshSeconds = 60f;
+        private const float AdviceAgeRefreshSeconds = 15f;
         private const int CandleOutputSize = 160;
         private const int DynamicFontSize = 90;
         private const string PageResourcePath = "Pages/FxTradeAdvisorPage";
         public const string SettingsWindowAddress = "TestFXTrade/UI/SettingsWindow";
         public const string LanguageWindowAddress = "TestFXTrade/UI/LanguageWindow";
         public const string UsageGuideWindowAddress = "TestFXTrade/UI/UsageGuideWindow";
+        public const string AdviceWindowAddress = "TestFXTrade/UI/AdviceWindow";
         private const string BundledChineseFontResourcePath = "Fonts/NotoSansSC-Regular";
         private const string ChineseFontProbeText = "中文交易建议保证金行情规则买卖建玉数量通貨同步均价建仓";
         private const string UsageGuideFallback =
@@ -84,17 +86,19 @@ namespace TestFXTrade.Fx.UI
         [SerializeField] private AssetReferenceGameObject settingsWindowPrefab;
         [SerializeField] private AssetReferenceGameObject languageWindowPrefab;
         [SerializeField] private AssetReferenceGameObject usageGuideWindowPrefab;
+        [SerializeField] private AssetReferenceGameObject adviceWindowPrefab;
         [SerializeField] private Toggle autoRefreshToggle;
         [SerializeField] private Button refreshMarketButton;
         [SerializeField] private Button syncSbiRulesButton;
         [SerializeField] private Button requestAiAdviceButton;
         [SerializeField] private Button aggressiveAiAdviceButton;
+        [SerializeField] private Button reopenAdviceButton;
+        [SerializeField] private TMP_Text reopenAdviceButtonText;
         [SerializeField] private TMP_Text marketSourceText;
         [SerializeField] private TMP_Text statusText;
         [SerializeField] private TMP_Text sbiRulesText;
         [SerializeField] private TMP_Text quoteText;
         [SerializeField] private TMP_Text metricsText;
-        [SerializeField] private TMP_Text recommendationText;
         [SerializeField] private TMP_Text warningsText;
         [SerializeField] private UsdJpyTrendLineGraphic chartGraphic;
         [SerializeField] private GameObject loadingIndicator;
@@ -117,8 +121,11 @@ namespace TestFXTrade.Fx.UI
         private double lastAdviceCurrentNetLots;
         private bool lastAdviceAdjusted;
         private AiTradeAdviceMode lastAdviceMode;
+        private string latestAdviceDisplayText = string.Empty;
+        private DateTime? lastAdviceGeneratedAt;
         private float nextQuoteRefreshAt;
         private float nextCandleRefreshAt;
+        private float nextAdviceAgeRefreshAt;
         private bool quoteRefreshInFlight;
         private bool candleRefreshInFlight;
         private bool sbiSyncInFlight;
@@ -131,7 +138,8 @@ namespace TestFXTrade.Fx.UI
         {
             Settings,
             Language,
-            UsageGuide
+            UsageGuide,
+            Advice
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -220,6 +228,7 @@ namespace TestFXTrade.Fx.UI
         {
             UpdateLoadingAnimation();
             RefreshAdaptiveLayout();
+            RefreshAdviceAgeIfNeeded();
 
             if (loadingOperationCount > 0 || string.IsNullOrWhiteSpace(relayBaseUrl) || !autoRefreshToggle.isOn)
             {
@@ -310,17 +319,20 @@ namespace TestFXTrade.Fx.UI
                    languageWindowPrefab.RuntimeKeyIsValid() &&
                    usageGuideWindowPrefab != null &&
                    usageGuideWindowPrefab.RuntimeKeyIsValid() &&
+                   adviceWindowPrefab != null &&
+                   adviceWindowPrefab.RuntimeKeyIsValid() &&
                    autoRefreshToggle != null &&
                    refreshMarketButton != null &&
                    syncSbiRulesButton != null &&
                    requestAiAdviceButton != null &&
                    aggressiveAiAdviceButton != null &&
+                   reopenAdviceButton != null &&
+                   reopenAdviceButtonText != null &&
                    marketSourceText != null &&
                    statusText != null &&
                    sbiRulesText != null &&
                    quoteText != null &&
                    metricsText != null &&
-                   recommendationText != null &&
                    warningsText != null &&
                    chartGraphic != null &&
                    loadingIndicator != null &&
@@ -333,6 +345,7 @@ namespace TestFXTrade.Fx.UI
             ApplyRuntimeFontToCanvas();
             BindStaticUiTexts(uiCanvas.transform);
             BindUiEvents();
+            UpdateAdviceButtonState();
             RefreshAdaptiveLayout(true);
         }
 
@@ -382,6 +395,9 @@ namespace TestFXTrade.Fx.UI
 
             aggressiveAiAdviceButton.onClick.RemoveListener(OnAggressiveAdviceClicked);
             aggressiveAiAdviceButton.onClick.AddListener(OnAggressiveAdviceClicked);
+
+            reopenAdviceButton.onClick.RemoveListener(OnReopenAdviceClicked);
+            reopenAdviceButton.onClick.AddListener(OnReopenAdviceClicked);
         }
 
         private void OnIntervalSelected(int unused)
@@ -417,6 +433,14 @@ namespace TestFXTrade.Fx.UI
         private void OnUsageGuideClicked()
         {
             _ = ShowAddressableWindowAsync(AddressableWindowKind.UsageGuide);
+        }
+
+        private void OnReopenAdviceClicked()
+        {
+            if (lastAdvice != null && lastAdviceGeneratedAt.HasValue)
+            {
+                _ = ShowAddressableWindowAsync(AddressableWindowKind.Advice);
+            }
         }
 
         private void CloseAddressableWindow()
@@ -511,6 +535,19 @@ namespace TestFXTrade.Fx.UI
                     guideWindow.Initialize(CloseAddressableWindow);
                     return true;
 
+                case AddressableWindowKind.Advice:
+                    FxTradeAdviceWindow adviceWindow = instance.GetComponent<FxTradeAdviceWindow>();
+                    if (adviceWindow == null || lastAdvice == null || !lastAdviceGeneratedAt.HasValue)
+                    {
+                        return false;
+                    }
+
+                    adviceWindow.Initialize(
+                        latestAdviceDisplayText,
+                        BuildAdviceWindowMetadata(),
+                        CloseAddressableWindow);
+                    return true;
+
                 default:
                     return false;
             }
@@ -526,6 +563,8 @@ namespace TestFXTrade.Fx.UI
                     return languageWindowPrefab;
                 case AddressableWindowKind.UsageGuide:
                     return usageGuideWindowPrefab;
+                case AddressableWindowKind.Advice:
+                    return adviceWindowPrefab;
                 default:
                     return null;
             }
@@ -541,6 +580,8 @@ namespace TestFXTrade.Fx.UI
                     return LanguageWindowAddress;
                 case AddressableWindowKind.UsageGuide:
                     return UsageGuideWindowAddress;
+                case AddressableWindowKind.Advice:
+                    return AdviceWindowAddress;
                 default:
                     return string.Empty;
             }
@@ -656,16 +697,16 @@ namespace TestFXTrade.Fx.UI
                 parent,
                 "Market Insight Card",
                 new Color32(16, 22, 30, 255),
-                192f,
-                192f,
+                304f,
+                304f,
                 8,
                 4f);
             quoteText = AddQuoteText(insightCard, "正在等待 USD/JPY 实时行情");
 
             GameObject chartPanel = CreatePanel("ChartPanel", insightCard, new Color32(9, 14, 20, 255));
             LayoutElement chartLayout = chartPanel.AddComponent<LayoutElement>();
-            chartLayout.minHeight = 84;
-            chartLayout.preferredHeight = 88;
+            chartLayout.minHeight = 190f;
+            chartLayout.preferredHeight = 194f;
             chartLayout.flexibleWidth = 1;
             chartLayout.flexibleHeight = 0;
             GameObject chartLine = CreateUiObject("ChartLine", chartPanel.transform);
@@ -680,32 +721,26 @@ namespace TestFXTrade.Fx.UI
 
             metricsText = AddBodyText(insightCard, "行情指标将在此显示。");
             LayoutElement metricsLayout = metricsText.GetComponent<LayoutElement>();
-            metricsLayout.minHeight = 44f;
-            metricsLayout.preferredHeight = 44f;
+            metricsLayout.minHeight = 50f;
+            metricsLayout.preferredHeight = 50f;
 
-            Transform adviceCard = CreateCardSection(
+            Transform adviceAccessCard = CreateCardSection(
                 parent,
-                "Advice Card",
-                new Color32(20, 27, 37, 255),
-                116f,
-                116f,
-                10,
-                0f,
-                1f);
-            recommendationText = AddBodyText(adviceCard, "输入本金和净建玉数量，同步SBI规则后即可获取AI建议。");
-            recommendationText.gameObject.name = "AI Advice Text";
-            LayoutElement recommendationLayout = recommendationText.GetComponent<LayoutElement>();
-            recommendationLayout.minHeight = 92;
-            recommendationLayout.preferredHeight = 96;
-            recommendationLayout.flexibleHeight = 1;
-            recommendationText.fontSize = 12;
-            recommendationText.color = new Color32(234, 239, 246, 255);
+                "Advice Access Card",
+                new Color32(18, 28, 38, 255),
+                52f,
+                52f,
+                6,
+                0f);
+            reopenAdviceButton = AddAdviceResultButton(adviceAccessCard, out reopenAdviceButtonText);
+            UpdateAdviceButtonState();
+
             Transform warningCard = CreateCardSection(
                 parent,
                 "Warning Card",
                 new Color32(42, 32, 21, 255),
-                44f,
-                44f,
+                48f,
+                48f,
                 8,
                 0f);
             warningsText = AddBodyText(warningCard, string.Empty);
@@ -734,6 +769,88 @@ namespace TestFXTrade.Fx.UI
                     lastAdviceAdjusted,
                     lastAdviceMode);
             }
+
+            UpdateAdviceButtonState();
+        }
+
+        private void RefreshAdviceAgeIfNeeded()
+        {
+            float now = Time.unscaledTime;
+            if (now < nextAdviceAgeRefreshAt)
+            {
+                return;
+            }
+
+            nextAdviceAgeRefreshAt = now + AdviceAgeRefreshSeconds;
+            UpdateAdviceButtonState();
+        }
+
+        private void UpdateAdviceButtonState()
+        {
+            if (reopenAdviceButton == null || reopenAdviceButtonText == null)
+            {
+                return;
+            }
+
+            bool hasAdvice = lastAdvice != null &&
+                             lastAdviceGeneratedAt.HasValue &&
+                             !string.IsNullOrWhiteSpace(latestAdviceDisplayText);
+            reopenAdviceButton.interactable = hasAdvice;
+            reopenAdviceButtonText.text = hasAdvice
+                ? FormatAdviceAgeLabel(lastAdviceGeneratedAt.Value, DateTime.Now)
+                : FxTradeLocalization.Get("advice_button_empty", "暂无 AI 建议");
+        }
+
+        private static string FormatAdviceAgeLabel(DateTime generatedAt, DateTime now)
+        {
+            TimeSpan elapsed = now - generatedAt;
+            if (elapsed < TimeSpan.Zero)
+            {
+                elapsed = TimeSpan.Zero;
+            }
+
+            if (elapsed.TotalMinutes < 1d)
+            {
+                return FxTradeLocalization.Get("advice_button_just_now", "查看建议 · 刚刚");
+            }
+
+            if (elapsed.TotalHours < 1d)
+            {
+                return FxTradeLocalization.Get(
+                    "advice_button_minutes_ago",
+                    "查看建议 · {0} 分钟前",
+                    Math.Max(1, (int)elapsed.TotalMinutes));
+            }
+
+            if (elapsed.TotalDays < 1d)
+            {
+                return FxTradeLocalization.Get(
+                    "advice_button_hours_ago",
+                    "查看建议 · {0} 小时前",
+                    Math.Max(1, (int)elapsed.TotalHours));
+            }
+
+            return FxTradeLocalization.Get(
+                "advice_button_days_ago",
+                "查看建议 · {0} 天前",
+                Math.Max(1, (int)elapsed.TotalDays));
+        }
+
+        private string BuildAdviceWindowMetadata()
+        {
+            if (!lastAdviceGeneratedAt.HasValue)
+            {
+                return string.Empty;
+            }
+
+            string modeLabel = lastAdviceMode == AiTradeAdviceMode.ForcedDirectional
+                ? FxTradeLocalization.Get("mode_aggressive_advice", "积极建议")
+                : FxTradeLocalization.Get("mode_conservative_advice", "稳健建议");
+            return FxTradeLocalization.Get(
+                "advice_window_generated_meta",
+                "{0} · 生成于 {1:yyyy-MM-dd HH:mm}",
+                modeLabel,
+                lastAdviceGeneratedAt.Value);
         }
 
         private static void BindStaticUiTexts(Transform root)
@@ -782,6 +899,9 @@ namespace TestFXTrade.Fx.UI
                         break;
                     case "App 使用说明":
                         FxTradeLocalization.Bind(text, "usage_guide_title", text.text);
+                        break;
+                    case "AI 交易建议":
+                        FxTradeLocalization.Bind(text, "advice_window_title", text.text);
                         break;
                     case "返回":
                         FxTradeLocalization.Bind(text, "button_back", text.text);
@@ -1172,12 +1292,6 @@ namespace TestFXTrade.Fx.UI
                     FxTradeLocalization.GetAiResponseLanguageInstruction());
 
                 bool aggressive = mode == AiTradeAdviceMode.ForcedDirectional;
-                FxTradeLocalization.Bind(
-                    recommendationText,
-                    aggressive ? "advice_analyzing_aggressive" : "advice_analyzing_conservative",
-                    aggressive
-                        ? "OpenAI正在按积极策略结合实时行情、技术指标和SBI保证金规则进行分析……"
-                        : "OpenAI正在按稳健策略结合实时行情、技术指标和SBI保证金规则进行分析……");
                 SetStatus(
                     aggressive ? "status_requesting_openai_aggressive" : "status_requesting_openai_conservative",
                     aggressive
@@ -1194,7 +1308,9 @@ namespace TestFXTrade.Fx.UI
                     FxTradeLocalization.GetAiResponseLanguageInstruction(),
                     token);
                 bool adjusted = ApplyLocalMarginGuard(advice, principalJpy, netPositionLots, sbiRules, mode);
+                lastAdviceGeneratedAt = DateTime.Now;
                 RenderAiAdvice(advice, principalJpy, netPositionLots, adjusted, mode);
+                _ = ShowAddressableWindowAsync(AddressableWindowKind.Advice);
                 SetStatus(
                     aggressive ? "status_aggressive_updated" : "status_conservative_updated",
                     aggressive ? "积极策略已更新：{0:HH:mm:ss}" : "稳健策略已更新：{0:HH:mm:ss}",
@@ -1207,10 +1323,6 @@ namespace TestFXTrade.Fx.UI
             catch (Exception ex)
             {
                 SetStatus("status_ai_failed", "AI建议请求失败。");
-                FxTradeLocalization.Bind(
-                    recommendationText,
-                    "advice_failed",
-                    "当前未取得新的AI建议，请保留原持仓判断并检查配置。");
                 SetWarning("warning_error_detail", "错误：{0}", ex.Message);
             }
             finally
@@ -1460,6 +1572,88 @@ namespace TestFXTrade.Fx.UI
 
             FxTradeUsageGuideWindow window = usageGuideOverlay.AddComponent<FxTradeUsageGuideWindow>();
             window.Configure(closeUsageGuideButton, usageGuideBodyText);
+        }
+
+        private void BuildAdviceOverlay(Transform parent)
+        {
+            GameObject adviceOverlay = CreateUiObject("Advice Window", parent);
+            RectTransform overlayRect = adviceOverlay.GetComponent<RectTransform>();
+            Stretch(overlayRect);
+            Image overlayBackground = adviceOverlay.AddComponent<Image>();
+            overlayBackground.color = new Color32(5, 9, 14, 238);
+
+            GameObject page = CreatePanel(
+                "Advice Page",
+                adviceOverlay.transform,
+                new Color32(15, 23, 31, 255));
+            RectTransform pageRect = page.GetComponent<RectTransform>();
+            pageRect.anchorMin = new Vector2(0.035f, 0.03f);
+            pageRect.anchorMax = new Vector2(0.965f, 0.97f);
+            pageRect.offsetMin = Vector2.zero;
+            pageRect.offsetMax = Vector2.zero;
+
+            Outline pageOutline = page.AddComponent<Outline>();
+            pageOutline.effectColor = new Color32(123, 217, 171, 175);
+            pageOutline.effectDistance = new Vector2(1f, -1f);
+
+            VerticalLayoutGroup pageLayout = page.AddComponent<VerticalLayoutGroup>();
+            pageLayout.padding = new RectOffset(16, 16, 16, 16);
+            pageLayout.spacing = 10f;
+            pageLayout.childControlHeight = true;
+            pageLayout.childControlWidth = true;
+            pageLayout.childForceExpandHeight = false;
+            pageLayout.childForceExpandWidth = true;
+
+            Transform header = CreateUsageGuideHeader(page.transform);
+            header.gameObject.name = "Advice Header";
+            TMP_Text title = AddText(
+                header,
+                "AI 交易建议",
+                20,
+                FontStyles.Bold,
+                new Color32(244, 247, 251, 255));
+            title.alignment = TextAlignmentOptions.MidlineLeft;
+            LayoutElement titleLayout = title.gameObject.AddComponent<LayoutElement>();
+            titleLayout.minHeight = 38f;
+            titleLayout.preferredHeight = 38f;
+            titleLayout.flexibleWidth = 1f;
+
+            Button closeButton = AddUsageGuideBackButton(header, "关闭");
+            closeButton.gameObject.name = "Close Button";
+
+            TMP_Text generatedAtText = AddText(
+                page.transform,
+                "稳健建议 · 生成于 2026-07-16 18:42",
+                11,
+                FontStyles.Normal,
+                new Color32(123, 217, 171, 255));
+            generatedAtText.gameObject.name = "Generated At Text";
+            generatedAtText.alignment = TextAlignmentOptions.MidlineLeft;
+            LayoutElement generatedAtLayout = generatedAtText.gameObject.AddComponent<LayoutElement>();
+            generatedAtLayout.minHeight = 22f;
+            generatedAtLayout.preferredHeight = 22f;
+
+            Transform scrollContent = CreateUsageGuideScrollView(page.transform);
+            scrollContent.parent.parent.gameObject.name = "Advice Scroll View";
+            TMP_Text adviceBodyText = AddText(
+                scrollContent,
+                "稳健建议：观望   置信度 78%\n\n当前价格接近短期阻力位，动量尚未形成明确突破。建议等待价格确认方向后再考虑建仓。\n\n依据：短周期均线趋于平缓，波动率回落，当前风险收益比不足。\n\n风险提示\nAI 建议仅供参考，请结合本金、现有持仓与 SBI 保证金规则自行判断。",
+                14,
+                FontStyles.Normal,
+                new Color32(224, 231, 239, 255));
+            adviceBodyText.gameObject.name = "Advice Body";
+            adviceBodyText.alignment = TextAlignmentOptions.TopLeft;
+            adviceBodyText.textWrappingMode = TextWrappingModes.Normal;
+            adviceBodyText.overflowMode = TextOverflowModes.Overflow;
+            adviceBodyText.lineSpacing = 9f;
+            LayoutElement bodyLayout = adviceBodyText.gameObject.AddComponent<LayoutElement>();
+            bodyLayout.minWidth = 0f;
+            bodyLayout.flexibleWidth = 1f;
+            ContentSizeFitter bodyFitter = adviceBodyText.gameObject.AddComponent<ContentSizeFitter>();
+            bodyFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            FxTradeAdviceWindow window = adviceOverlay.AddComponent<FxTradeAdviceWindow>();
+            window.Configure(closeButton, generatedAtText, adviceBodyText);
         }
 
         private void CreateLoadingSpinnerDots(Transform parent)
@@ -1730,8 +1924,7 @@ namespace TestFXTrade.Fx.UI
             string modeLabel = mode == AiTradeAdviceMode.ForcedDirectional
                 ? FxTradeLocalization.Get("mode_aggressive_advice", "积极建议")
                 : FxTradeLocalization.Get("mode_conservative_advice", "稳健建议");
-            FxTradeLocalization.Bind(
-                recommendationText,
+            string adviceResult = FxTradeLocalization.Get(
                 "advice_result",
                 "{0}：{1} 建玉数量 {2}   置信度 {3:P0}\n{4}\n依据：{5}",
                 modeLabel,
@@ -1747,6 +1940,22 @@ namespace TestFXTrade.Fx.UI
             string forcedDirectionWarning = mode == AiTradeAdviceMode.ForcedDirectional
                 ? FxTradeLocalization.Get("forced_direction_warning", " 积极模式会强制选择方向，不代表信号充分。")
                 : string.Empty;
+
+            string riskSummary = FxTradeLocalization.Get(
+                "warning_ai_result",
+                "{0} 预计交易后净建玉数量 {1}，保证金占本金 {2:0.0}%。{3}{4} AI建议仅供参考，不构成投资建议。",
+                NormalizeVisibleAdviceText(advice.risk_warning),
+                FormatQuantityFromLots(postTradeNetLots),
+                marginUsagePercent,
+                adjustedText,
+                forcedDirectionWarning);
+            latestAdviceDisplayText = FxTradeLocalization.Get(
+                "advice_window_body",
+                "{0}\n\n风险提示\n{1}",
+                adviceResult,
+                riskSummary);
+            UpdateAdviceButtonState();
+
             SetWarning(
                 "warning_ai_result",
                 "{0} 预计交易后净建玉数量 {1}，保证金占本金 {2:0.0}%。{3}{4} AI建议仅供参考，不构成投资建议。",
@@ -2731,6 +2940,70 @@ namespace TestFXTrade.Fx.UI
             LayoutElement layout = buttonObject.AddComponent<LayoutElement>();
             layout.minHeight = 32;
             layout.preferredHeight = 32;
+            return button;
+        }
+
+        private Button AddAdviceResultButton(Transform parent, out TMP_Text buttonText)
+        {
+            GameObject buttonObject = CreateUiObject("Advice Result Button", parent);
+            Image background = buttonObject.AddComponent<Image>();
+            background.color = new Color32(24, 74, 62, 255);
+            Outline outline = buttonObject.AddComponent<Outline>();
+            outline.effectColor = new Color32(123, 217, 171, 145);
+            outline.effectDistance = new Vector2(1f, -1f);
+
+            Button button = buttonObject.AddComponent<Button>();
+            button.targetGraphic = background;
+            ColorBlock colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color32(180, 242, 211, 255);
+            colors.pressedColor = new Color32(134, 196, 167, 255);
+            colors.disabledColor = new Color32(104, 110, 117, 190);
+            button.colors = colors;
+
+            GameObject marker = CreateUiObject("Advice Marker", buttonObject.transform);
+            RectTransform markerRect = marker.GetComponent<RectTransform>();
+            markerRect.anchorMin = new Vector2(0f, 0.18f);
+            markerRect.anchorMax = new Vector2(0f, 0.82f);
+            markerRect.pivot = new Vector2(0f, 0.5f);
+            markerRect.offsetMin = new Vector2(0f, 0f);
+            markerRect.offsetMax = new Vector2(4f, 0f);
+            Image markerImage = marker.AddComponent<Image>();
+            markerImage.color = new Color32(123, 217, 171, 255);
+            markerImage.raycastTarget = false;
+
+            buttonText = AddText(
+                buttonObject.transform,
+                "暂无 AI 建议",
+                12,
+                FontStyles.Bold,
+                new Color32(233, 244, 239, 255));
+            buttonText.gameObject.name = "Advice Result Button Text";
+            buttonText.alignment = TextAlignmentOptions.MidlineLeft;
+            RectTransform textRect = buttonText.GetComponent<RectTransform>();
+            Stretch(textRect);
+            textRect.offsetMin = new Vector2(14f, 0f);
+            textRect.offsetMax = new Vector2(-38f, 0f);
+
+            TMP_Text arrow = AddText(
+                buttonObject.transform,
+                "›",
+                22,
+                FontStyles.Normal,
+                new Color32(123, 217, 171, 255));
+            arrow.gameObject.name = "Advice Result Arrow";
+            arrow.alignment = TextAlignmentOptions.Center;
+            RectTransform arrowRect = arrow.GetComponent<RectTransform>();
+            arrowRect.anchorMin = new Vector2(1f, 0f);
+            arrowRect.anchorMax = Vector2.one;
+            arrowRect.pivot = new Vector2(1f, 0.5f);
+            arrowRect.offsetMin = new Vector2(-34f, 0f);
+            arrowRect.offsetMax = new Vector2(-4f, 0f);
+
+            LayoutElement layout = buttonObject.AddComponent<LayoutElement>();
+            layout.minHeight = 40f;
+            layout.preferredHeight = 40f;
+            layout.flexibleWidth = 1f;
             return button;
         }
 

@@ -490,6 +490,38 @@ MonoBehaviour:
     m_Localized: Language Settings
     m_Metadata:
       m_Items: []
+  - m_Id: 3094339658
+    m_Localized: AI Trade Advice
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339659
+    m_Localized: No AI advice yet
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339660
+    m_Localized: "View advice \u00B7 just now"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339661
+    m_Localized: "View advice \u00B7 {0} min ago"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339662
+    m_Localized: "View advice \u00B7 {0} hr ago"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339663
+    m_Localized: "View advice \u00B7 {0} d ago"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339664
+    m_Localized: "{0} \u00B7 generated {1:yyyy-MM-dd HH:mm}"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339665
+    m_Localized: "{0}\n\nRisk notice\n{1}"
+    m_Metadata:
+      m_Items: []
   references:
     version: 2
     RefIds: []

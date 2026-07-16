@@ -471,6 +471,38 @@ MonoBehaviour:
     m_Localized: "\u8BED\u8A00\u8BBE\u7F6E"
     m_Metadata:
       m_Items: []
+  - m_Id: 3094339658
+    m_Localized: "AI \u4EA4\u6613\u5EFA\u8BAE"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339659
+    m_Localized: "\u6682\u65E0 AI \u5EFA\u8BAE"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339660
+    m_Localized: "\u67E5\u770B\u5EFA\u8BAE \u00B7 \u521A\u521A"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339661
+    m_Localized: "\u67E5\u770B\u5EFA\u8BAE \u00B7 {0} \u5206\u949F\u524D"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339662
+    m_Localized: "\u67E5\u770B\u5EFA\u8BAE \u00B7 {0} \u5C0F\u65F6\u524D"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339663
+    m_Localized: "\u67E5\u770B\u5EFA\u8BAE \u00B7 {0} \u5929\u524D"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339664
+    m_Localized: "{0} \u00B7 \u751F\u6210\u4E8E {1:yyyy-MM-dd HH:mm}"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339665
+    m_Localized: "{0}\n\n\u98CE\u9669\u63D0\u793A\n{1}"
+    m_Metadata:
+      m_Items: []
   references:
     version: 2
     RefIds: []

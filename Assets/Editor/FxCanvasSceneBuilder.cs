@@ -28,6 +28,7 @@ namespace TestFXTrade.Editor
         private const string SettingsWindowPrefabPath = AddressableUiFolderPath + "/FxTradeSettingsWindow.prefab";
         private const string LanguageWindowPrefabPath = AddressableUiFolderPath + "/FxTradeLanguageWindow.prefab";
         private const string UsageGuideWindowPrefabPath = AddressableUiFolderPath + "/FxTradeUsageGuideWindow.prefab";
+        private const string AdviceWindowPrefabPath = AddressableUiFolderPath + "/FxTradeAdviceWindow.prefab";
         private const string AddressableUiGroupName = "FX Trade UI";
         private const string AddressableUiLabel = "FXTradeUI";
         private const string PageName = "FxTradeAdvisorPage";
@@ -40,6 +41,7 @@ namespace TestFXTrade.Editor
         private const string SettingsPreviewPath = "Logs/FxTradeAdvisorSettingsPreview.png";
         private const string LanguagePreviewPath = "Logs/FxTradeAdvisorLanguagePreview.png";
         private const string UsageGuidePreviewPath = "Logs/FxTradeAdvisorUsageGuidePreview.png";
+        private const string AdvicePreviewPath = "Logs/FxTradeAdvisorAdvicePreview.png";
 
         [MenuItem("Tools/FX Trade/Rebuild Advisor Page Prefab")]
         public static void RebuildAdvisorPagePrefab()
@@ -70,6 +72,7 @@ namespace TestFXTrade.Editor
                 BuildAndSaveWindowPrefab(app, windowBuilderRoot.transform, "BuildSettingsOverlay", SettingsWindowPrefabPath);
                 BuildAndSaveWindowPrefab(app, windowBuilderRoot.transform, "BuildLanguageSettingsOverlay", LanguageWindowPrefabPath);
                 BuildAndSaveWindowPrefab(app, windowBuilderRoot.transform, "BuildUsageGuideOverlay", UsageGuideWindowPrefabPath);
+                BuildAndSaveWindowPrefab(app, windowBuilderRoot.transform, "BuildAdviceOverlay", AdviceWindowPrefabPath);
             }
             finally
             {
@@ -89,6 +92,10 @@ namespace TestFXTrade.Editor
                 app,
                 "usageGuideWindowPrefab",
                 new AssetReferenceGameObject(AssetDatabase.AssetPathToGUID(UsageGuideWindowPrefabPath)));
+            SetPrivateField(
+                app,
+                "adviceWindowPrefab",
+                new AssetReferenceGameObject(AssetDatabase.AssetPathToGUID(AdviceWindowPrefabPath)));
 
             MethodInfo buildUi = typeof(FxTradeAdvisorApp).GetMethod(
                 "BuildUi",
@@ -119,7 +126,7 @@ namespace TestFXTrade.Editor
 
             AssetDatabase.SaveAssets();
             Debug.Log(
-                $"Rebuilt {PagePrefabPath} plus three Addressable UI window prefabs in group " +
+                $"Rebuilt {PagePrefabPath} plus four Addressable UI window prefabs in group " +
                 $"'{AddressableUiGroupName}', and removed scene-owned UI from {ScenePath}.");
         }
 
@@ -175,6 +182,7 @@ namespace TestFXTrade.Editor
                 string settingsPreviewPath = ResolveProjectPath(SettingsPreviewPath);
                 string languagePreviewPath = ResolveProjectPath(LanguagePreviewPath);
                 string usageGuidePreviewPath = ResolveProjectPath(UsageGuidePreviewPath);
+                string advicePreviewPath = ResolveProjectPath(AdvicePreviewPath);
                 RenderPreview(camera, previewTexture, previewPath);
 
                 Transform loadingIndicator = page.transform.Find(
@@ -214,10 +222,17 @@ namespace TestFXTrade.Editor
                     windowParent,
                     UsageGuideWindowPrefabPath,
                     usageGuidePreviewPath);
+                RenderWindowPreview(
+                    camera,
+                    previewTexture,
+                    windowParent,
+                    AdviceWindowPrefabPath,
+                    advicePreviewPath);
 
                 Debug.Log(
                     $"Rendered advisor page previews to {previewPath}, {loadingPreviewPath}, " +
-                    $"{settingsPreviewPath}, {languagePreviewPath}, and {usageGuidePreviewPath}.");
+                    $"{settingsPreviewPath}, {languagePreviewPath}, {usageGuidePreviewPath}, " +
+                    $"and {advicePreviewPath}.");
             }
             finally
             {
@@ -270,6 +285,8 @@ namespace TestFXTrade.Editor
                 graphics[i].SetAllDirty();
             }
 
+            Canvas.ForceUpdateCanvases();
+            camera.Render();
             Canvas.ForceUpdateCanvases();
             camera.Render();
             RenderTexture.active = renderTexture;
@@ -411,6 +428,11 @@ namespace TestFXTrade.Editor
                 group,
                 UsageGuideWindowPrefabPath,
                 FxTradeAdvisorApp.UsageGuideWindowAddress);
+            ConfigureAddressableEntry(
+                settings,
+                group,
+                AdviceWindowPrefabPath,
+                FxTradeAdvisorApp.AdviceWindowAddress);
 
             EditorUtility.SetDirty(bundledSchema);
             EditorUtility.SetDirty(group);

@@ -15,6 +15,12 @@ MonoBehaviour:
   m_GroupName: FX Trade UI
   m_GUID: f9550bbc07dcc4cb69c3b05963f78c20
   m_SerializeEntries:
+  - m_GUID: 020c47f93484a420494bfac71827bc93
+    m_Address: TestFXTrade/UI/AdviceWindow
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - FXTradeUI
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 637dd48bc40fe4703a462c42be0b6024
     m_Address: TestFXTrade/UI/SettingsWindow
     m_ReadOnly: 0
