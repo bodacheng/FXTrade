@@ -466,6 +466,30 @@ MonoBehaviour:
     m_Localized: Close
     m_Metadata:
       m_Items: []
+  - m_Id: 3094339652
+    m_Localized: User Guide
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339653
+    m_Localized: App User Guide
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339654
+    m_Localized: "Getting Started\n\n1. Configure the Azure relay URL in AzureRelayConfig.json. Provider keys remain on the backend only.\n\n2. After opening the main screen, confirm that the USD/JPY quote has updated. Select 1min, 5min, or 15min, or tap Refresh to update manually.\n\n3. Enter capital in JPY, the current net position quantity in currency units, and the USD/JPY entry price. A positive quantity is long, a negative quantity is short, and 0 is flat.\n\n4. Tap SBI Rules / Sync to retrieve and save the latest SBI FX rules.\n\n5. Choose Conservative Advice or Aggressive Advice. Aggressive mode requires an explicit buy or sell direction.\n\n6. Review the live chart, technical indicators, AI advice, and risk notices before making your own trading decision.\n\nNotes\n\n\u2022 Quotes update every 5 seconds; candles refresh about every 60 seconds.\n\u2022 AI advice is informational and is not investment advice.\n\u2022 If quotes or advice are unavailable, check the Azure relay configuration and network status."
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339655
+    m_Localized: Back
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339656
+    m_Localized: Change the app display language.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339657
+    m_Localized: Language Settings
+    m_Metadata:
+      m_Items: []
   references:
     version: 2
     RefIds: []

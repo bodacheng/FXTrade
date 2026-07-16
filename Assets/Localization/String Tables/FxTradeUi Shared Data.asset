@@ -439,6 +439,30 @@ MonoBehaviour:
     m_Key: button_close
     m_Metadata:
       m_Items: []
+  - m_Id: 3094339652
+    m_Key: button_usage_guide
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339653
+    m_Key: usage_guide_title
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339654
+    m_Key: usage_guide_body
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339655
+    m_Key: button_back
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339656
+    m_Key: settings_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339657
+    m_Key: button_language_settings
+    m_Metadata:
+      m_Items: []
   m_Metadata:
     m_Items: []
   m_KeyGenerator:

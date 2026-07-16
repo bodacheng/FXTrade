@@ -4,8 +4,13 @@ using System.Reflection;
 using TestFXTrade.Fx.UI;
 using TMPro;
 using UnityEditor;
+using UnityEditor.AddressableAssets;
+using UnityEditor.AddressableAssets.Build;
+using UnityEditor.AddressableAssets.Settings;
+using UnityEditor.AddressableAssets.Settings.GroupSchemas;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.AddressableAssets;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.TextCore.LowLevel;
@@ -19,13 +24,22 @@ namespace TestFXTrade.Editor
         private const string CanvasName = "USDJPY Advisor Canvas";
         private const string PageFolderPath = "Assets/Resources/Pages";
         private const string PagePrefabPath = PageFolderPath + "/FxTradeAdvisorPage.prefab";
+        private const string AddressableUiFolderPath = "Assets/UI/Addressable";
+        private const string SettingsWindowPrefabPath = AddressableUiFolderPath + "/FxTradeSettingsWindow.prefab";
+        private const string LanguageWindowPrefabPath = AddressableUiFolderPath + "/FxTradeLanguageWindow.prefab";
+        private const string UsageGuideWindowPrefabPath = AddressableUiFolderPath + "/FxTradeUsageGuideWindow.prefab";
+        private const string AddressableUiGroupName = "FX Trade UI";
+        private const string AddressableUiLabel = "FXTradeUI";
         private const string PageName = "FxTradeAdvisorPage";
         private const string SourceFontPath = "Assets/Resources/Fonts/NotoSansSC-Regular.otf";
         private const string SceneFontPath = "Assets/Resources/Fonts/NotoSansSC-Regular SDF.asset";
-        private const string SettingsIconPath = "Assets/setting_17909217.png";
+        private const string SettingsIconPath = "Assets/Sprite/setting_17909217.png";
+        private const string UsageGuideIconPath = "Assets/Sprite/question-mark-symbol-isolated-on-transparent_68186040.png";
         private const string PreviewPath = "Logs/FxTradeAdvisorPagePreview.png";
         private const string LoadingPreviewPath = "Logs/FxTradeAdvisorLoadingPreview.png";
         private const string SettingsPreviewPath = "Logs/FxTradeAdvisorSettingsPreview.png";
+        private const string LanguagePreviewPath = "Logs/FxTradeAdvisorLanguagePreview.png";
+        private const string UsageGuidePreviewPath = "Logs/FxTradeAdvisorUsageGuidePreview.png";
 
         [MenuItem("Tools/FX Trade/Rebuild Advisor Page Prefab")]
         public static void RebuildAdvisorPagePrefab()
@@ -33,6 +47,7 @@ namespace TestFXTrade.Editor
             Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
             RemoveExistingAdvisorUi();
             EnsurePageFolder();
+            EnsureAddressableUiFolder();
 
             GameObject pageObject = new GameObject(
                 PageName,
@@ -43,26 +58,37 @@ namespace TestFXTrade.Editor
             FxTradeAdvisorApp app = pageObject.AddComponent<FxTradeAdvisorApp>();
             TMP_FontAsset sceneFont = LoadOrCreateSceneFont();
             Sprite settingsIcon = LoadSettingsIcon();
+            Sprite usageGuideIcon = LoadUsageGuideIcon();
 
-            FieldInfo fontField = typeof(FxTradeAdvisorApp).GetField(
-                "font",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-            if (fontField == null)
+            SetPrivateField(app, "font", sceneFont);
+            SetPrivateField(app, "settingsIcon", settingsIcon);
+            SetPrivateField(app, "usageGuideIcon", usageGuideIcon);
+
+            GameObject windowBuilderRoot = new GameObject("Addressable UI Builder Root", typeof(RectTransform));
+            try
             {
-                throw new MissingFieldException(typeof(FxTradeAdvisorApp).FullName, "font");
+                BuildAndSaveWindowPrefab(app, windowBuilderRoot.transform, "BuildSettingsOverlay", SettingsWindowPrefabPath);
+                BuildAndSaveWindowPrefab(app, windowBuilderRoot.transform, "BuildLanguageSettingsOverlay", LanguageWindowPrefabPath);
+                BuildAndSaveWindowPrefab(app, windowBuilderRoot.transform, "BuildUsageGuideOverlay", UsageGuideWindowPrefabPath);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(windowBuilderRoot);
             }
 
-            fontField.SetValue(app, sceneFont);
-
-            FieldInfo settingsIconField = typeof(FxTradeAdvisorApp).GetField(
-                "settingsIcon",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-            if (settingsIconField == null)
-            {
-                throw new MissingFieldException(typeof(FxTradeAdvisorApp).FullName, "settingsIcon");
-            }
-
-            settingsIconField.SetValue(app, settingsIcon);
+            ConfigureAddressableUiGroup();
+            SetPrivateField(
+                app,
+                "settingsWindowPrefab",
+                new AssetReferenceGameObject(AssetDatabase.AssetPathToGUID(SettingsWindowPrefabPath)));
+            SetPrivateField(
+                app,
+                "languageWindowPrefab",
+                new AssetReferenceGameObject(AssetDatabase.AssetPathToGUID(LanguageWindowPrefabPath)));
+            SetPrivateField(
+                app,
+                "usageGuideWindowPrefab",
+                new AssetReferenceGameObject(AssetDatabase.AssetPathToGUID(UsageGuideWindowPrefabPath)));
 
             MethodInfo buildUi = typeof(FxTradeAdvisorApp).GetMethod(
                 "BuildUi",
@@ -92,7 +118,24 @@ namespace TestFXTrade.Editor
             }
 
             AssetDatabase.SaveAssets();
-            Debug.Log($"Rebuilt dynamic uGUI page prefab at {PagePrefabPath} and removed it from {ScenePath}.");
+            Debug.Log(
+                $"Rebuilt {PagePrefabPath} plus three Addressable UI window prefabs in group " +
+                $"'{AddressableUiGroupName}', and removed scene-owned UI from {ScenePath}.");
+        }
+
+        [MenuItem("Tools/FX Trade/Build Addressable UI Content")]
+        public static void BuildAddressableUiContent()
+        {
+            ConfigureAddressableUiGroup();
+            AddressableAssetSettings.BuildPlayerContent(out AddressablesPlayerBuildResult result);
+            if (result == null || !string.IsNullOrWhiteSpace(result.Error))
+            {
+                throw new InvalidOperationException(
+                    result == null ? "Addressables returned no build result." : result.Error);
+            }
+
+            Debug.Log(
+                $"Built Addressable UI content with {result.LocationCount} locations to {result.OutputPath}.");
         }
 
         [MenuItem("Tools/FX Trade/Render Advisor Page Previews")]
@@ -130,6 +173,8 @@ namespace TestFXTrade.Editor
                 string previewPath = ResolveProjectPath(PreviewPath);
                 string loadingPreviewPath = ResolveProjectPath(LoadingPreviewPath);
                 string settingsPreviewPath = ResolveProjectPath(SettingsPreviewPath);
+                string languagePreviewPath = ResolveProjectPath(LanguagePreviewPath);
+                string usageGuidePreviewPath = ResolveProjectPath(UsageGuidePreviewPath);
                 RenderPreview(camera, previewTexture, previewPath);
 
                 Transform loadingIndicator = page.transform.Find(
@@ -145,18 +190,34 @@ namespace TestFXTrade.Editor
                 RenderPreview(camera, previewTexture, loadingPreviewPath);
                 loadingIndicator.gameObject.SetActive(false);
 
-                Transform settingsOverlay = page.transform.Find("Root/Settings Overlay");
-                if (settingsOverlay == null)
+                Transform windowParent = page.transform.Find("Root");
+                if (windowParent == null)
                 {
-                    throw new InvalidOperationException("The page prefab does not contain the settings overlay.");
+                    throw new InvalidOperationException("The page prefab does not contain its UI root.");
                 }
 
-                settingsOverlay.gameObject.SetActive(true);
-                Canvas.ForceUpdateCanvases();
-                RenderPreview(camera, previewTexture, settingsPreviewPath);
+                RenderWindowPreview(
+                    camera,
+                    previewTexture,
+                    windowParent,
+                    SettingsWindowPrefabPath,
+                    settingsPreviewPath);
+                RenderWindowPreview(
+                    camera,
+                    previewTexture,
+                    windowParent,
+                    LanguageWindowPrefabPath,
+                    languagePreviewPath);
+                RenderWindowPreview(
+                    camera,
+                    previewTexture,
+                    windowParent,
+                    UsageGuideWindowPrefabPath,
+                    usageGuidePreviewPath);
+
                 Debug.Log(
                     $"Rendered advisor page previews to {previewPath}, {loadingPreviewPath}, " +
-                    $"and {settingsPreviewPath}.");
+                    $"{settingsPreviewPath}, {languagePreviewPath}, and {usageGuidePreviewPath}.");
             }
             finally
             {
@@ -168,8 +229,48 @@ namespace TestFXTrade.Editor
             }
         }
 
+        private static void RenderWindowPreview(
+            Camera camera,
+            RenderTexture renderTexture,
+            Transform parent,
+            string prefabPath,
+            string outputPath)
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (prefab == null)
+            {
+                throw new InvalidOperationException($"Could not load Addressable UI prefab at {prefabPath}.");
+            }
+
+            GameObject instance = PrefabUtility.InstantiatePrefab(prefab, parent) as GameObject;
+            if (instance == null)
+            {
+                throw new InvalidOperationException($"Could not instantiate Addressable UI prefab at {prefabPath}.");
+            }
+
+            try
+            {
+                instance.transform.SetAsLastSibling();
+                Canvas.ForceUpdateCanvases();
+                RenderPreview(camera, renderTexture, outputPath);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(instance);
+            }
+        }
+
         private static void RenderPreview(Camera camera, RenderTexture renderTexture, string path)
         {
+            Graphic[] graphics = UnityEngine.Object.FindObjectsByType<Graphic>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.None);
+            for (int i = 0; i < graphics.Length; i++)
+            {
+                graphics[i].SetAllDirty();
+            }
+
+            Canvas.ForceUpdateCanvases();
             camera.Render();
             RenderTexture.active = renderTexture;
             Texture2D image = new Texture2D(renderTexture.width, renderTexture.height, TextureFormat.RGBA32, false);
@@ -196,6 +297,155 @@ namespace TestFXTrade.Editor
             {
                 AssetDatabase.CreateFolder("Assets/Resources", "Pages");
             }
+        }
+
+        private static void EnsureAddressableUiFolder()
+        {
+            if (!AssetDatabase.IsValidFolder("Assets/UI"))
+            {
+                AssetDatabase.CreateFolder("Assets", "UI");
+            }
+
+            if (!AssetDatabase.IsValidFolder(AddressableUiFolderPath))
+            {
+                AssetDatabase.CreateFolder("Assets/UI", "Addressable");
+            }
+        }
+
+        private static void BuildAndSaveWindowPrefab(
+            FxTradeAdvisorApp app,
+            Transform builderRoot,
+            string buildMethodName,
+            string prefabPath)
+        {
+            MethodInfo buildMethod = typeof(FxTradeAdvisorApp).GetMethod(
+                buildMethodName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            if (buildMethod == null)
+            {
+                throw new MissingMethodException(typeof(FxTradeAdvisorApp).FullName, buildMethodName);
+            }
+
+            int previousChildCount = builderRoot.childCount;
+            buildMethod.Invoke(app, new object[] { builderRoot });
+            if (builderRoot.childCount != previousChildCount + 1)
+            {
+                throw new InvalidOperationException($"{buildMethodName} did not create exactly one UI window.");
+            }
+
+            GameObject window = builderRoot.GetChild(previousChildCount).gameObject;
+            try
+            {
+                MethodInfo bindTexts = typeof(FxTradeAdvisorApp).GetMethod(
+                    "BindStaticUiTexts",
+                    BindingFlags.Static | BindingFlags.NonPublic);
+                if (bindTexts == null)
+                {
+                    throw new MissingMethodException(typeof(FxTradeAdvisorApp).FullName, "BindStaticUiTexts");
+                }
+
+                bindTexts.Invoke(null, new object[] { window.transform });
+                Canvas.ForceUpdateCanvases();
+                EditorUtility.SetDirty(window);
+                GameObject savedPrefab = PrefabUtility.SaveAsPrefabAsset(window, prefabPath, out bool saved);
+                if (!saved || savedPrefab == null)
+                {
+                    throw new InvalidOperationException($"Could not save Addressable UI prefab at {prefabPath}.");
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(window);
+            }
+        }
+
+        private static void ConfigureAddressableUiGroup()
+        {
+            AddressableAssetSettings settings = AddressableAssetSettingsDefaultObject.Settings;
+            if (settings == null)
+            {
+                throw new InvalidOperationException("The project does not contain Addressable Asset settings.");
+            }
+
+            AddressableAssetGroup group = settings.FindGroup(AddressableUiGroupName);
+            if (group == null)
+            {
+                group = settings.CreateGroup(
+                    AddressableUiGroupName,
+                    false,
+                    false,
+                    false,
+                    null,
+                    typeof(ContentUpdateGroupSchema),
+                    typeof(BundledAssetGroupSchema));
+            }
+
+            BundledAssetGroupSchema bundledSchema = group.GetSchema<BundledAssetGroupSchema>();
+            if (bundledSchema == null)
+            {
+                bundledSchema = group.AddSchema<BundledAssetGroupSchema>(false);
+            }
+
+            if (group.GetSchema<ContentUpdateGroupSchema>() == null)
+            {
+                group.AddSchema<ContentUpdateGroupSchema>(false);
+            }
+
+            bundledSchema.BuildPath.SetVariableByName(settings, AddressableAssetSettings.kLocalBuildPath);
+            bundledSchema.LoadPath.SetVariableByName(settings, AddressableAssetSettings.kLocalLoadPath);
+            bundledSchema.BundleMode = BundledAssetGroupSchema.BundlePackingMode.PackSeparately;
+            settings.AddLabel(AddressableUiLabel, false);
+
+            ConfigureAddressableEntry(
+                settings,
+                group,
+                SettingsWindowPrefabPath,
+                FxTradeAdvisorApp.SettingsWindowAddress);
+            ConfigureAddressableEntry(
+                settings,
+                group,
+                LanguageWindowPrefabPath,
+                FxTradeAdvisorApp.LanguageWindowAddress);
+            ConfigureAddressableEntry(
+                settings,
+                group,
+                UsageGuideWindowPrefabPath,
+                FxTradeAdvisorApp.UsageGuideWindowAddress);
+
+            EditorUtility.SetDirty(bundledSchema);
+            EditorUtility.SetDirty(group);
+            EditorUtility.SetDirty(settings);
+            AssetDatabase.SaveAssets();
+        }
+
+        private static void ConfigureAddressableEntry(
+            AddressableAssetSettings settings,
+            AddressableAssetGroup group,
+            string assetPath,
+            string address)
+        {
+            string guid = AssetDatabase.AssetPathToGUID(assetPath);
+            if (string.IsNullOrWhiteSpace(guid))
+            {
+                throw new InvalidOperationException($"Could not resolve an asset GUID for {assetPath}.");
+            }
+
+            AddressableAssetEntry entry = settings.CreateOrMoveEntry(guid, group, false, false);
+            entry.SetAddress(address, false);
+            entry.SetLabel(AddressableUiLabel, true, true, false);
+        }
+
+        private static void SetPrivateField(FxTradeAdvisorApp app, string fieldName, object value)
+        {
+            FieldInfo field = typeof(FxTradeAdvisorApp).GetField(
+                fieldName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null)
+            {
+                throw new MissingFieldException(typeof(FxTradeAdvisorApp).FullName, fieldName);
+            }
+
+            field.SetValue(app, value);
         }
 
         private static TMP_FontAsset LoadOrCreateSceneFont()
@@ -250,7 +500,39 @@ namespace TestFXTrade.Editor
 
         private static Sprite LoadSettingsIcon()
         {
-            UnityEngine.Object[] iconAssets = AssetDatabase.LoadAllAssetsAtPath(SettingsIconPath);
+            return LoadIconSprite(SettingsIconPath);
+        }
+
+        private static Sprite LoadUsageGuideIcon()
+        {
+            AssetDatabase.ImportAsset(UsageGuideIconPath, ImportAssetOptions.ForceSynchronousImport);
+            TextureImporter importer = AssetImporter.GetAtPath(UsageGuideIconPath) as TextureImporter;
+            if (importer == null)
+            {
+                throw new InvalidOperationException($"Could not import the toolbar icon at {UsageGuideIconPath}.");
+            }
+
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.alphaIsTransparency = true;
+            importer.mipmapEnabled = false;
+            importer.maxTextureSize = 512;
+            importer.textureCompression = TextureImporterCompression.CompressedHQ;
+            importer.SaveAndReimport();
+
+            Sprite sprite = AssetDatabase.LoadAssetAtPath<Sprite>(UsageGuideIconPath);
+            if (sprite == null)
+            {
+                throw new InvalidOperationException($"Could not load the toolbar icon at {UsageGuideIconPath}.");
+            }
+
+            return sprite;
+        }
+
+        private static Sprite LoadIconSprite(string assetPath)
+        {
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport);
+            UnityEngine.Object[] iconAssets = AssetDatabase.LoadAllAssetsAtPath(assetPath);
             for (int i = 0; i < iconAssets.Length; i++)
             {
                 if (iconAssets[i] is Sprite sprite)
@@ -259,7 +541,27 @@ namespace TestFXTrade.Editor
                 }
             }
 
-            throw new InvalidOperationException($"Could not load the settings icon at {SettingsIconPath}.");
+            TextureImporter importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            if (importer == null)
+            {
+                throw new InvalidOperationException($"Could not import the toolbar icon at {assetPath}.");
+            }
+
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.alphaIsTransparency = true;
+            importer.mipmapEnabled = false;
+            importer.maxTextureSize = 512;
+            importer.textureCompression = TextureImporterCompression.CompressedHQ;
+            importer.SaveAndReimport();
+
+            Sprite importedSprite = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
+            if (importedSprite == null)
+            {
+                throw new InvalidOperationException($"Could not load the toolbar icon at {assetPath}.");
+            }
+
+            return importedSprite;
         }
 
         private static void RemoveExistingAdvisorUi()

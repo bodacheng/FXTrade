@@ -5,8 +5,12 @@ using NUnit.Framework;
 using TestFXTrade.Fx.Domain;
 using TestFXTrade.Fx.UI;
 using TMPro;
+using UnityEditor;
+using UnityEditor.AddressableAssets;
+using UnityEditor.AddressableAssets.Settings;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.AddressableAssets;
 using UnityEngine.EventSystems;
 using UnityEngine.Localization;
 using UnityEngine.Localization.Components;
@@ -19,7 +23,7 @@ namespace TestFXTrade.Tests.EditMode.Fx
     public sealed class SmartAdvisorUiTests
     {
         [Test]
-        public void AdvisorPagePrefabIsBoundAndSampleSceneDoesNotStoreUi()
+        public void AdvisorPageAndAddressableWindowsAreSeparatedFromSampleScene()
         {
             GameObject pagePrefab = Resources.Load<GameObject>("Pages/FxTradeAdvisorPage");
             Assert.NotNull(pagePrefab);
@@ -52,12 +56,64 @@ namespace TestFXTrade.Tests.EditMode.Fx
             Assert.NotNull(prefabSettingsIcon);
             Assert.NotNull(prefabSettingsIcon.sprite);
             Assert.AreEqual("setting_17909217_0", prefabSettingsIcon.sprite.name);
+            Transform prefabUsageGuideButton = pagePrefab.transform.Find(
+                "Root/Safe Area Content/Header Card/Header Bar/Header Actions/Usage Guide Button");
+            Assert.NotNull(prefabUsageGuideButton);
+            Transform prefabUsageGuideIconTransform = prefabUsageGuideButton.Find("Usage Guide Icon");
+            Assert.NotNull(prefabUsageGuideIconTransform);
+            Image prefabUsageGuideIcon = prefabUsageGuideIconTransform.GetComponent<Image>();
+            Assert.NotNull(prefabUsageGuideIcon);
+            Assert.NotNull(prefabUsageGuideIcon.sprite);
+            Assert.That(prefabUsageGuideIcon.sprite.name, Does.StartWith("question-mark-symbol-isolated"));
             Assert.IsNull(pagePrefab.transform.Find("Root/Safe Area Content/Language Controls"));
-            Transform settingsOverlay = pagePrefab.transform.Find("Root/Settings Overlay");
-            Assert.NotNull(settingsOverlay);
-            Assert.IsFalse(settingsOverlay.gameObject.activeSelf);
-            Assert.NotNull(settingsOverlay.Find("Settings Panel/Language Settings/语言 Field/语言 Dropdown"));
-            Assert.NotNull(settingsOverlay.Find("Settings Panel/Close Settings Button"));
+            Assert.IsNull(pagePrefab.transform.Find("Root/Settings Window"));
+            Assert.IsNull(pagePrefab.transform.Find("Root/Language Window"));
+            Assert.IsNull(pagePrefab.transform.Find("Root/Usage Guide Window"));
+
+            AssetReferenceGameObject settingsReference = GetAssetReference(app, "settingsWindowPrefab");
+            AssetReferenceGameObject languageReference = GetAssetReference(app, "languageWindowPrefab");
+            AssetReferenceGameObject guideReference = GetAssetReference(app, "usageGuideWindowPrefab");
+            Assert.AreEqual(
+                "Assets/UI/Addressable/FxTradeSettingsWindow.prefab",
+                AssetDatabase.GUIDToAssetPath(settingsReference.AssetGUID));
+            Assert.AreEqual(
+                "Assets/UI/Addressable/FxTradeLanguageWindow.prefab",
+                AssetDatabase.GUIDToAssetPath(languageReference.AssetGUID));
+            Assert.AreEqual(
+                "Assets/UI/Addressable/FxTradeUsageGuideWindow.prefab",
+                AssetDatabase.GUIDToAssetPath(guideReference.AssetGUID));
+
+            GameObject settingsPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/UI/Addressable/FxTradeSettingsWindow.prefab");
+            GameObject languagePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/UI/Addressable/FxTradeLanguageWindow.prefab");
+            GameObject guidePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/UI/Addressable/FxTradeUsageGuideWindow.prefab");
+            Assert.NotNull(settingsPrefab);
+            Assert.NotNull(languagePrefab);
+            Assert.NotNull(guidePrefab);
+            Assert.NotNull(settingsPrefab.GetComponent<FxTradeSettingsWindow>());
+            Assert.NotNull(settingsPrefab.transform.Find("Settings Panel/Language Settings Button"));
+            Assert.IsNull(settingsPrefab.transform.Find("Settings Panel/Usage Guide Button"));
+            Assert.NotNull(settingsPrefab.transform.Find("Settings Panel/Close Settings Button"));
+            Assert.NotNull(languagePrefab.GetComponent<FxTradeLanguageWindow>());
+            Assert.NotNull(languagePrefab.transform.Find("Language Panel/Language Settings/语言 Field/语言 Dropdown"));
+            Assert.NotNull(languagePrefab.transform.Find("Language Panel/Back Button"));
+            Assert.NotNull(guidePrefab.GetComponent<FxTradeUsageGuideWindow>());
+            Assert.NotNull(guidePrefab.transform.Find("Usage Guide Page/Usage Guide Header/Back Button"));
+            Transform usageGuideScrollView = guidePrefab.transform.Find("Usage Guide Page/Usage Guide Scroll View");
+            Assert.NotNull(usageGuideScrollView);
+            Assert.NotNull(usageGuideScrollView.GetComponent<ScrollRect>());
+            Transform usageGuideBody = usageGuideScrollView.Find("Viewport/Content/Usage Guide Body");
+            Assert.NotNull(usageGuideBody);
+            Assert.That(usageGuideBody.GetComponent<TMP_Text>().text, Does.Contain("AzureRelayConfig.json"));
+
+            AddressableAssetSettings addressableSettings = AddressableAssetSettingsDefaultObject.Settings;
+            AddressableAssetGroup uiGroup = addressableSettings.FindGroup("FX Trade UI");
+            Assert.NotNull(uiGroup);
+            AssertAddressableEntry(addressableSettings, settingsReference, FxTradeAdvisorApp.SettingsWindowAddress);
+            AssertAddressableEntry(addressableSettings, languageReference, FxTradeAdvisorApp.LanguageWindowAddress);
+            AssertAddressableEntry(addressableSettings, guideReference, FxTradeAdvisorApp.UsageGuideWindowAddress);
 
             Scene scene = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
 
@@ -76,15 +132,44 @@ namespace TestFXTrade.Tests.EditMode.Fx
             }
         }
 
+        private static AssetReferenceGameObject GetAssetReference(FxTradeAdvisorApp app, string fieldName)
+        {
+            FieldInfo field = typeof(FxTradeAdvisorApp).GetField(
+                fieldName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(field);
+            AssetReferenceGameObject reference = field.GetValue(app) as AssetReferenceGameObject;
+            Assert.NotNull(reference);
+            Assert.IsTrue(reference.RuntimeKeyIsValid());
+            return reference;
+        }
+
+        private static void AssertAddressableEntry(
+            AddressableAssetSettings settings,
+            AssetReferenceGameObject reference,
+            string expectedAddress)
+        {
+            AddressableAssetEntry entry = settings.FindAssetEntry(reference.AssetGUID);
+            Assert.NotNull(entry);
+            Assert.AreEqual("FX Trade UI", entry.parentGroup.Name);
+            Assert.AreEqual(expectedAddress, entry.address);
+            Assert.Contains("FXTradeUI", new List<string>(entry.labels));
+        }
+
         [Test]
         public void BootstrapInstantiatesAdvisorPageResource()
         {
             EventSystem existingEventSystem = UnityEngine.Object.FindAnyObjectByType<EventSystem>();
             FxTradeAdvisorApp pageApp = null;
+            FxTradeAdvisorApp existingPageApp = UnityEngine.Object.FindAnyObjectByType<FxTradeAdvisorApp>();
 
             try
             {
-                Assert.IsNull(UnityEngine.Object.FindAnyObjectByType<FxTradeAdvisorApp>());
+                if (existingPageApp != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(existingPageApp.gameObject);
+                }
+
                 MethodInfo bootstrap = typeof(FxTradeAdvisorApp).GetMethod(
                     "Bootstrap",
                     BindingFlags.Static | BindingFlags.NonPublic);
@@ -109,6 +194,52 @@ namespace TestFXTrade.Tests.EditMode.Fx
                     UnityEngine.Object.DestroyImmediate(currentEventSystem.gameObject);
                 }
             }
+        }
+
+        [Test]
+        public void AddressableWindowEntriesAndControllersAreIndependent()
+        {
+            LocalizationSettings.InitializationOperation.WaitForCompletion();
+            GameObject settingsPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/UI/Addressable/FxTradeSettingsWindow.prefab");
+            GameObject languagePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/UI/Addressable/FxTradeLanguageWindow.prefab");
+            GameObject guidePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/UI/Addressable/FxTradeUsageGuideWindow.prefab");
+
+            GameObject settingsInstance = UnityEngine.Object.Instantiate(settingsPrefab);
+            bool languageRequested = false;
+            bool closeRequested = false;
+            FxTradeSettingsWindow settingsWindow = settingsInstance.GetComponent<FxTradeSettingsWindow>();
+            settingsWindow.Initialize(
+                () => languageRequested = true,
+                () => closeRequested = true);
+            settingsInstance.transform.Find("Settings Panel/Language Settings Button").GetComponent<Button>().onClick.Invoke();
+            settingsInstance.transform.Find("Settings Panel/Close Settings Button").GetComponent<Button>().onClick.Invoke();
+            Assert.IsTrue(languageRequested);
+            Assert.IsTrue(closeRequested);
+            UnityEngine.Object.DestroyImmediate(settingsInstance);
+            Assert.IsTrue(settingsInstance == null);
+
+            GameObject languageInstance = UnityEngine.Object.Instantiate(languagePrefab);
+            bool languageBackRequested = false;
+            FxTradeLanguageWindow languageWindow = languageInstance.GetComponent<FxTradeLanguageWindow>();
+            languageWindow.Initialize(null, () => languageBackRequested = true);
+            Assert.AreEqual(3, languageWindow.LanguageDropdown.options.Count);
+            languageInstance.transform.Find("Language Panel/Back Button").GetComponent<Button>().onClick.Invoke();
+            Assert.IsTrue(languageBackRequested);
+            UnityEngine.Object.DestroyImmediate(languageInstance);
+            Assert.IsTrue(languageInstance == null);
+
+            GameObject guideInstance = UnityEngine.Object.Instantiate(guidePrefab);
+            bool guideBackRequested = false;
+            FxTradeUsageGuideWindow guideWindow = guideInstance.GetComponent<FxTradeUsageGuideWindow>();
+            guideWindow.Initialize(() => guideBackRequested = true);
+            Assert.That(guideWindow.BodyText.text, Does.Contain("AzureRelayConfig.json"));
+            guideInstance.transform.Find("Usage Guide Page/Usage Guide Header/Back Button").GetComponent<Button>().onClick.Invoke();
+            Assert.IsTrue(guideBackRequested);
+            UnityEngine.Object.DestroyImmediate(guideInstance);
+            Assert.IsTrue(guideInstance == null);
         }
 
         [Test]
@@ -159,7 +290,7 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 Assert.AreEqual(0, canvasObject.GetComponentsInChildren<InputField>(true).Length);
                 Assert.AreEqual(0, canvasObject.GetComponentsInChildren<Dropdown>(true).Length);
                 Assert.Greater(canvasObject.GetComponentsInChildren<TextMeshProUGUI>(true).Length, 0);
-                Assert.AreEqual(2, canvasObject.GetComponentsInChildren<TMP_Dropdown>(true).Length);
+                Assert.AreEqual(1, canvasObject.GetComponentsInChildren<TMP_Dropdown>(true).Length);
                 Assert.Greater(canvasObject.GetComponentsInChildren<LocalizeStringEvent>(true).Length, 0);
                 TMP_Text[] visibleTexts = canvasObject.GetComponentsInChildren<TMP_Text>(true);
                 bool hasPositionQuantityLabel = false;
@@ -181,14 +312,12 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 Assert.NotNull(safeArea);
                 Assert.IsNull(safeArea.Find("Language Controls"));
                 Transform settingsButton = safeArea.Find("Header Card/Header Bar/Header Actions/Settings Button");
-                Transform settingsOverlay = canvasObject.transform.Find("Root/Settings Overlay");
+                Transform usageGuideButton = safeArea.Find("Header Card/Header Bar/Header Actions/Usage Guide Button");
                 Assert.NotNull(settingsButton);
-                Assert.NotNull(settingsOverlay);
-                Assert.IsFalse(settingsOverlay.gameObject.activeSelf);
-                settingsButton.GetComponent<Button>().onClick.Invoke();
-                Assert.IsTrue(settingsOverlay.gameObject.activeSelf);
-                settingsOverlay.Find("Settings Panel/Close Settings Button").GetComponent<Button>().onClick.Invoke();
-                Assert.IsFalse(settingsOverlay.gameObject.activeSelf);
+                Assert.NotNull(usageGuideButton);
+                Assert.IsNull(canvasObject.transform.Find("Root/Settings Window"));
+                Assert.IsNull(canvasObject.transform.Find("Root/Language Window"));
+                Assert.IsNull(canvasObject.transform.Find("Root/Usage Guide Window"));
 
                 accountInputs[0].SetTextWithoutNotify("1,000,000");
                 accountInputs[1].SetTextWithoutNotify("-10,000");
@@ -250,12 +379,16 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 Assert.IsTrue(loadingIndicator.gameObject.activeSelf);
                 Canvas.ForceUpdateCanvases();
                 RectTransform loadingRect = loadingIndicator.GetComponent<RectTransform>();
+                RectTransform usageGuideRect = usageGuideButton.GetComponent<RectTransform>();
                 RectTransform settingsRect = settingsButton.GetComponent<RectTransform>();
                 Vector3[] loadingCorners = new Vector3[4];
+                Vector3[] usageGuideCorners = new Vector3[4];
                 Vector3[] settingsCorners = new Vector3[4];
                 loadingRect.GetWorldCorners(loadingCorners);
+                usageGuideRect.GetWorldCorners(usageGuideCorners);
                 settingsRect.GetWorldCorners(settingsCorners);
-                Assert.LessOrEqual(loadingCorners[2].x, settingsCorners[0].x);
+                Assert.LessOrEqual(loadingCorners[2].x, usageGuideCorners[0].x);
+                Assert.LessOrEqual(usageGuideCorners[2].x, settingsCorners[0].x);
                 for (int i = 0; i < buttons.Length; i++)
                 {
                     Assert.IsTrue(buttons[i].interactable);
@@ -329,6 +462,18 @@ namespace TestFXTrade.Tests.EditMode.Fx
             Assert.AreEqual(
                 "閉じる",
                 LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "button_close", japanese));
+            Assert.AreEqual(
+                "User Guide",
+                LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "button_usage_guide", english));
+            Assert.AreEqual(
+                "Language Settings",
+                LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "button_language_settings", english));
+            Assert.AreEqual(
+                "戻る",
+                LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "button_back", japanese));
+            Assert.That(
+                LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "usage_guide_body", english),
+                Does.Contain("AzureRelayConfig.json"));
 
             try
             {

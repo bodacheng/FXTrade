@@ -2,6 +2,7 @@
     "name": "TestFXTrade.Fx",
     "rootNamespace": "",
     "references": [
+        "Unity.Addressables",
         "Unity.InputSystem",
         "Unity.Localization",
         "Unity.ResourceManager",

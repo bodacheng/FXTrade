@@ -11,7 +11,9 @@ using TestFXTrade.Fx.OpenAI;
 using TestFXTrade.Fx.Sbi;
 using TMPro;
 using UnityEngine;
+using UnityEngine.AddressableAssets;
 using UnityEngine.EventSystems;
+using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.TextCore.LowLevel;
 using UnityEngine.UI;
 
@@ -25,8 +27,23 @@ namespace TestFXTrade.Fx.UI
         private const int CandleOutputSize = 160;
         private const int DynamicFontSize = 90;
         private const string PageResourcePath = "Pages/FxTradeAdvisorPage";
+        public const string SettingsWindowAddress = "TestFXTrade/UI/SettingsWindow";
+        public const string LanguageWindowAddress = "TestFXTrade/UI/LanguageWindow";
+        public const string UsageGuideWindowAddress = "TestFXTrade/UI/UsageGuideWindow";
         private const string BundledChineseFontResourcePath = "Fonts/NotoSansSC-Regular";
         private const string ChineseFontProbeText = "中文交易建议保证金行情规则买卖建玉数量通貨同步均价建仓";
+        private const string UsageGuideFallback =
+            "开始使用\n\n" +
+            "1. 在 AzureRelayConfig.json 中配置 Azure 中转地址。供应商密钥只保存在后台。\n\n" +
+            "2. 进入主画面后确认 USD/JPY 行情已更新。可选择 1min、5min、15min 周期，或点击“刷新”手动更新。\n\n" +
+            "3. 输入本金（日元）、当前净建玉数量（通貨单位）和 USD/JPY 建仓均价。正数代表买入持仓，负数代表卖出持仓，0 代表空仓。\n\n" +
+            "4. 点击“SBI规则 / 同步”，读取并保存最新的 SBI FX 规则。\n\n" +
+            "5. 选择“稳健建议”或“积极建议”。积极模式会要求给出明确的买入或卖出方向。\n\n" +
+            "6. 阅读实时图表、技术指标、AI建议与风险提示，再自行决定是否交易。\n\n" +
+            "注意事项\n\n" +
+            "• 自动行情每 5 秒更新，K线约每 60 秒刷新。\n" +
+            "• AI建议仅供参考，不构成投资建议。\n" +
+            "• 无法获取行情或建议时，请检查 Azure 中转配置和网络状态。";
         private const NumberStyles UserNumberStyles = NumberStyles.Float | NumberStyles.AllowThousands;
         private static readonly Vector2 MobileReferenceResolution = new Vector2(390f, 844f);
         private static readonly Regex VisibleLotQuantityPattern = new Regex(
@@ -59,11 +76,14 @@ namespace TestFXTrade.Fx.UI
         [SerializeField] private TMP_InputField netPositionInput;
         [SerializeField] private TMP_InputField positionEntryPriceInput;
         [SerializeField] private TMP_Dropdown intervalDropdown;
-        [SerializeField] private TMP_Dropdown languageDropdown;
         [SerializeField] private Sprite settingsIcon;
+        [SerializeField] private Sprite usageGuideIcon;
         [SerializeField] private Button settingsButton;
-        [SerializeField] private GameObject settingsOverlay;
-        [SerializeField] private Button closeSettingsButton;
+        [SerializeField] private Button usageGuideToolbarButton;
+        [Header("Addressable UI Windows")]
+        [SerializeField] private AssetReferenceGameObject settingsWindowPrefab;
+        [SerializeField] private AssetReferenceGameObject languageWindowPrefab;
+        [SerializeField] private AssetReferenceGameObject usageGuideWindowPrefab;
         [SerializeField] private Toggle autoRefreshToggle;
         [SerializeField] private Button refreshMarketButton;
         [SerializeField] private Button syncSbiRulesButton;
@@ -104,6 +124,15 @@ namespace TestFXTrade.Fx.UI
         private bool sbiSyncInFlight;
         private bool aiAdviceInFlight;
         private int loadingOperationCount;
+        private GameObject activeAddressableWindow;
+        private int addressableWindowRequestVersion;
+
+        private enum AddressableWindowKind
+        {
+            Settings,
+            Language,
+            UsageGuide
+        }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Bootstrap()
@@ -217,6 +246,8 @@ namespace TestFXTrade.Fx.UI
         {
             CancelMarketDataRequests();
             CancelAdvisoryRequests();
+            addressableWindowRequestVersion++;
+            ReleaseActiveAddressableWindow();
         }
 
         private void BuildUi()
@@ -256,7 +287,6 @@ namespace TestFXTrade.Fx.UI
             BuildMarketControls(content.transform);
             BuildInputColumn(content.transform);
             BuildOutputColumn(content.transform);
-            BuildSettingsOverlay(root.transform);
             BindStaticUiTexts(root.transform);
             BindUiEvents();
             RefreshAdaptiveLayout(true);
@@ -270,11 +300,16 @@ namespace TestFXTrade.Fx.UI
                    netPositionInput != null &&
                    positionEntryPriceInput != null &&
                    intervalDropdown != null &&
-                   languageDropdown != null &&
                    settingsIcon != null &&
+                   usageGuideIcon != null &&
                    settingsButton != null &&
-                   settingsOverlay != null &&
-                   closeSettingsButton != null &&
+                   usageGuideToolbarButton != null &&
+                   settingsWindowPrefab != null &&
+                   settingsWindowPrefab.RuntimeKeyIsValid() &&
+                   languageWindowPrefab != null &&
+                   languageWindowPrefab.RuntimeKeyIsValid() &&
+                   usageGuideWindowPrefab != null &&
+                   usageGuideWindowPrefab.RuntimeKeyIsValid() &&
                    autoRefreshToggle != null &&
                    refreshMarketButton != null &&
                    syncSbiRulesButton != null &&
@@ -303,12 +338,22 @@ namespace TestFXTrade.Fx.UI
 
         private void ApplyRuntimeFontToCanvas()
         {
-            if (font == null || uiCanvas == null)
+            if (uiCanvas == null)
             {
                 return;
             }
 
-            TMP_Text[] texts = uiCanvas.GetComponentsInChildren<TMP_Text>(true);
+            ApplyRuntimeFontToRoot(uiCanvas.transform);
+        }
+
+        private void ApplyRuntimeFontToRoot(Transform root)
+        {
+            if (font == null || root == null)
+            {
+                return;
+            }
+
+            TMP_Text[] texts = root.GetComponentsInChildren<TMP_Text>(true);
             for (int i = 0; i < texts.Length; i++)
             {
                 texts[i].font = font;
@@ -317,14 +362,11 @@ namespace TestFXTrade.Fx.UI
 
         private void BindUiEvents()
         {
-            languageDropdown.onValueChanged.RemoveListener(OnLanguageSelected);
-            languageDropdown.onValueChanged.AddListener(OnLanguageSelected);
-
             settingsButton.onClick.RemoveListener(OnSettingsClicked);
             settingsButton.onClick.AddListener(OnSettingsClicked);
 
-            closeSettingsButton.onClick.RemoveListener(OnCloseSettingsClicked);
-            closeSettingsButton.onClick.AddListener(OnCloseSettingsClicked);
+            usageGuideToolbarButton.onClick.RemoveListener(OnUsageGuideClicked);
+            usageGuideToolbarButton.onClick.AddListener(OnUsageGuideClicked);
 
             intervalDropdown.onValueChanged.RemoveListener(OnIntervalSelected);
             intervalDropdown.onValueChanged.AddListener(OnIntervalSelected);
@@ -369,13 +411,166 @@ namespace TestFXTrade.Fx.UI
 
         private void OnSettingsClicked()
         {
-            settingsOverlay.SetActive(true);
-            settingsOverlay.transform.SetAsLastSibling();
+            _ = ShowAddressableWindowAsync(AddressableWindowKind.Settings);
         }
 
-        private void OnCloseSettingsClicked()
+        private void OnUsageGuideClicked()
         {
-            settingsOverlay.SetActive(false);
+            _ = ShowAddressableWindowAsync(AddressableWindowKind.UsageGuide);
+        }
+
+        private void CloseAddressableWindow()
+        {
+            addressableWindowRequestVersion++;
+            ReleaseActiveAddressableWindow();
+        }
+
+        private async Task ShowAddressableWindowAsync(AddressableWindowKind kind)
+        {
+            int requestVersion = ++addressableWindowRequestVersion;
+            ReleaseActiveAddressableWindow();
+
+            AssetReferenceGameObject reference = GetWindowReference(kind);
+            string fallbackAddress = GetWindowAddress(kind);
+            AsyncOperationHandle<GameObject> handle = reference != null && reference.RuntimeKeyIsValid()
+                ? reference.InstantiateAsync(uiCanvas.transform, false)
+                : Addressables.InstantiateAsync(fallbackAddress, uiCanvas.transform, false);
+
+            try
+            {
+                await handle.Task;
+            }
+            catch (Exception exception)
+            {
+                if (requestVersion == addressableWindowRequestVersion && this != null)
+                {
+                    Debug.LogError($"Could not load Addressable UI window '{fallbackAddress}': {exception.Message}", this);
+                }
+            }
+
+            if (requestVersion != addressableWindowRequestVersion || this == null)
+            {
+                ReleaseAddressableHandle(handle);
+                return;
+            }
+
+            if (handle.Status != AsyncOperationStatus.Succeeded || handle.Result == null)
+            {
+                ReleaseAddressableHandle(handle);
+                return;
+            }
+
+            activeAddressableWindow = handle.Result;
+            activeAddressableWindow.name = kind + " Window";
+            activeAddressableWindow.transform.SetAsLastSibling();
+            ApplyRuntimeFontToRoot(activeAddressableWindow.transform);
+            BindStaticUiTexts(activeAddressableWindow.transform);
+
+            if (!InitializeAddressableWindow(kind, activeAddressableWindow))
+            {
+                Debug.LogError($"Addressable UI window '{fallbackAddress}' has an invalid controller.", this);
+                CloseAddressableWindow();
+            }
+        }
+
+        private bool InitializeAddressableWindow(AddressableWindowKind kind, GameObject instance)
+        {
+            switch (kind)
+            {
+                case AddressableWindowKind.Settings:
+                    FxTradeSettingsWindow settingsWindow = instance.GetComponent<FxTradeSettingsWindow>();
+                    if (settingsWindow == null)
+                    {
+                        return false;
+                    }
+
+                    settingsWindow.Initialize(
+                        () => _ = ShowAddressableWindowAsync(AddressableWindowKind.Language),
+                        CloseAddressableWindow);
+                    return true;
+
+                case AddressableWindowKind.Language:
+                    FxTradeLanguageWindow languageWindow = instance.GetComponent<FxTradeLanguageWindow>();
+                    if (languageWindow == null)
+                    {
+                        return false;
+                    }
+
+                    languageWindow.Initialize(
+                        RefreshLocalizedDynamicState,
+                        () => _ = ShowAddressableWindowAsync(AddressableWindowKind.Settings));
+                    return true;
+
+                case AddressableWindowKind.UsageGuide:
+                    FxTradeUsageGuideWindow guideWindow = instance.GetComponent<FxTradeUsageGuideWindow>();
+                    if (guideWindow == null)
+                    {
+                        return false;
+                    }
+
+                    guideWindow.Initialize(CloseAddressableWindow);
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
+        private AssetReferenceGameObject GetWindowReference(AddressableWindowKind kind)
+        {
+            switch (kind)
+            {
+                case AddressableWindowKind.Settings:
+                    return settingsWindowPrefab;
+                case AddressableWindowKind.Language:
+                    return languageWindowPrefab;
+                case AddressableWindowKind.UsageGuide:
+                    return usageGuideWindowPrefab;
+                default:
+                    return null;
+            }
+        }
+
+        private static string GetWindowAddress(AddressableWindowKind kind)
+        {
+            switch (kind)
+            {
+                case AddressableWindowKind.Settings:
+                    return SettingsWindowAddress;
+                case AddressableWindowKind.Language:
+                    return LanguageWindowAddress;
+                case AddressableWindowKind.UsageGuide:
+                    return UsageGuideWindowAddress;
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private void ReleaseActiveAddressableWindow()
+        {
+            if (activeAddressableWindow == null)
+            {
+                return;
+            }
+
+            Addressables.ReleaseInstance(activeAddressableWindow);
+            activeAddressableWindow = null;
+        }
+
+        private static void ReleaseAddressableHandle(AsyncOperationHandle<GameObject> handle)
+        {
+            if (!handle.IsValid())
+            {
+                return;
+            }
+
+            if (handle.Status == AsyncOperationStatus.Succeeded && handle.Result != null)
+            {
+                Addressables.ReleaseInstance(handle.Result);
+                return;
+            }
+
+            Addressables.Release(handle);
         }
 
         private void BuildMarketControls(Transform parent)
@@ -395,7 +590,18 @@ namespace TestFXTrade.Fx.UI
 
             Transform headerActions = CreateHeaderActions(headerBar);
             BuildLoadingIndicator(headerActions);
-            settingsButton = AddToolbarButton(headerActions, "设置");
+            usageGuideToolbarButton = AddToolbarButton(
+                headerActions,
+                "Usage Guide Button",
+                "Usage Guide Icon",
+                usageGuideIcon,
+                "帮助");
+            settingsButton = AddToolbarButton(
+                headerActions,
+                "Settings Button",
+                "Settings Icon",
+                settingsIcon,
+                "设置");
 
             Transform marketCard = CreateCardSection(
                 parent,
@@ -509,20 +715,6 @@ namespace TestFXTrade.Fx.UI
             warningsText.color = new Color32(244, 192, 102, 255);
         }
 
-        private void OnLanguageSelected(int index)
-        {
-            if (FxTradeLocalization.SelectLocaleAt(index))
-            {
-                RefreshLocalizedDynamicState();
-                return;
-            }
-
-            if (languageDropdown != null)
-            {
-                languageDropdown.SetValueWithoutNotify(FxTradeLocalization.GetSelectedLocaleIndex());
-            }
-        }
-
         private void RefreshLocalizedDynamicState()
         {
             RenderSbiRuleState();
@@ -573,11 +765,26 @@ namespace TestFXTrade.Fx.UI
                     case "设置":
                         FxTradeLocalization.Bind(text, "button_settings", text.text);
                         break;
+                    case "调整 App 的显示语言。":
+                        FxTradeLocalization.Bind(text, "settings_description", text.text);
+                        break;
+                    case "语言设置":
+                        FxTradeLocalization.Bind(text, "button_language_settings", text.text);
+                        break;
                     case "在这里选择界面语言。":
                         FxTradeLocalization.Bind(text, "settings_language_description", text.text);
                         break;
                     case "关闭":
                         FxTradeLocalization.Bind(text, "button_close", text.text);
+                        break;
+                    case "使用说明":
+                        FxTradeLocalization.Bind(text, "button_usage_guide", text.text);
+                        break;
+                    case "App 使用说明":
+                        FxTradeLocalization.Bind(text, "usage_guide_title", text.text);
+                        break;
+                    case "返回":
+                        FxTradeLocalization.Bind(text, "button_back", text.text);
                         break;
                     case "手动行情":
                         FxTradeLocalization.Bind(text, "label_manual_market", text.text);
@@ -1047,7 +1254,7 @@ namespace TestFXTrade.Fx.UI
 
         private void BuildSettingsOverlay(Transform parent)
         {
-            settingsOverlay = CreateUiObject("Settings Overlay", parent);
+            GameObject settingsOverlay = CreateUiObject("Settings Window", parent);
             RectTransform overlayRect = settingsOverlay.GetComponent<RectTransform>();
             Stretch(overlayRect);
             Image overlayBackground = settingsOverlay.AddComponent<Image>();
@@ -1062,7 +1269,7 @@ namespace TestFXTrade.Fx.UI
             panelRect.anchorMax = new Vector2(0.5f, 0.5f);
             panelRect.pivot = new Vector2(0.5f, 0.5f);
             panelRect.anchoredPosition = Vector2.zero;
-            panelRect.sizeDelta = new Vector2(324f, 208f);
+            panelRect.sizeDelta = new Vector2(324f, 218f);
 
             Outline outline = panel.AddComponent<Outline>();
             outline.effectColor = new Color32(84, 99, 116, 180);
@@ -1105,6 +1312,65 @@ namespace TestFXTrade.Fx.UI
 
             TMP_Text description = AddText(
                 panel.transform,
+                "调整 App 的显示语言。",
+                11,
+                FontStyles.Normal,
+                new Color32(170, 178, 190, 255));
+            LayoutElement descriptionLayout = description.gameObject.AddComponent<LayoutElement>();
+            descriptionLayout.minHeight = 18f;
+            descriptionLayout.preferredHeight = 18f;
+
+            Button languageSettingsButton = AddSettingsMenuButton(panel.transform, "语言设置");
+            languageSettingsButton.gameObject.name = "Language Settings Button";
+            Button closeSettingsButton = AddModalButton(panel.transform, "关闭");
+
+            FxTradeSettingsWindow window = settingsOverlay.AddComponent<FxTradeSettingsWindow>();
+            window.Configure(languageSettingsButton, closeSettingsButton);
+        }
+
+        private void BuildLanguageSettingsOverlay(Transform parent)
+        {
+            GameObject languageOverlay = CreateUiObject("Language Window", parent);
+            RectTransform overlayRect = languageOverlay.GetComponent<RectTransform>();
+            Stretch(overlayRect);
+            Image overlayBackground = languageOverlay.AddComponent<Image>();
+            overlayBackground.color = new Color32(5, 7, 10, 205);
+
+            GameObject panel = CreatePanel(
+                "Language Panel",
+                languageOverlay.transform,
+                new Color32(31, 35, 41, 255));
+            RectTransform panelRect = panel.GetComponent<RectTransform>();
+            panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+            panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+            panelRect.pivot = new Vector2(0.5f, 0.5f);
+            panelRect.anchoredPosition = Vector2.zero;
+            panelRect.sizeDelta = new Vector2(324f, 218f);
+
+            Outline outline = panel.AddComponent<Outline>();
+            outline.effectColor = new Color32(84, 99, 116, 180);
+            outline.effectDistance = new Vector2(1f, -1f);
+
+            VerticalLayoutGroup group = panel.AddComponent<VerticalLayoutGroup>();
+            group.padding = new RectOffset(18, 18, 16, 16);
+            group.spacing = 10f;
+            group.childControlHeight = true;
+            group.childControlWidth = true;
+            group.childForceExpandHeight = false;
+            group.childForceExpandWidth = true;
+
+            TMP_Text title = AddText(
+                panel.transform,
+                "语言设置",
+                18,
+                FontStyles.Bold,
+                new Color32(244, 247, 251, 255));
+            LayoutElement titleLayout = title.gameObject.AddComponent<LayoutElement>();
+            titleLayout.minHeight = 26f;
+            titleLayout.preferredHeight = 26f;
+
+            TMP_Text description = AddText(
+                panel.transform,
                 "在这里选择界面语言。",
                 11,
                 FontStyles.Normal,
@@ -1114,14 +1380,86 @@ namespace TestFXTrade.Fx.UI
             descriptionLayout.preferredHeight = 18f;
 
             Transform languageControls = CreateCompactFieldRow(panel.transform, "Language Settings");
-            languageDropdown = AddDropdown(
+            TMP_Dropdown dropdown = AddDropdown(
                 languageControls,
                 "语言",
                 new List<string>(FxTradeLocalization.NativeLocaleNames),
                 FxTradeLocalization.GetSelectedLocaleIndex());
 
-            closeSettingsButton = AddModalButton(panel.transform, "关闭");
-            settingsOverlay.SetActive(false);
+            Button backButton = AddModalButton(panel.transform, "返回");
+            backButton.gameObject.name = "Back Button";
+            FxTradeLanguageWindow window = languageOverlay.AddComponent<FxTradeLanguageWindow>();
+            window.Configure(dropdown, backButton);
+        }
+
+        private void BuildUsageGuideOverlay(Transform parent)
+        {
+            GameObject usageGuideOverlay = CreateUiObject("Usage Guide Window", parent);
+            RectTransform overlayRect = usageGuideOverlay.GetComponent<RectTransform>();
+            Stretch(overlayRect);
+            Image overlayBackground = usageGuideOverlay.AddComponent<Image>();
+            overlayBackground.color = new Color32(7, 11, 16, 255);
+
+            GameObject page = CreatePanel(
+                "Usage Guide Page",
+                usageGuideOverlay.transform,
+                new Color32(18, 25, 35, 255));
+            RectTransform pageRect = page.GetComponent<RectTransform>();
+            pageRect.anchorMin = new Vector2(0.04f, 0.035f);
+            pageRect.anchorMax = new Vector2(0.96f, 0.965f);
+            pageRect.offsetMin = Vector2.zero;
+            pageRect.offsetMax = Vector2.zero;
+
+            Outline pageOutline = page.AddComponent<Outline>();
+            pageOutline.effectColor = new Color32(49, 181, 233, 150);
+            pageOutline.effectDistance = new Vector2(1f, -1f);
+
+            VerticalLayoutGroup pageLayout = page.AddComponent<VerticalLayoutGroup>();
+            pageLayout.padding = new RectOffset(16, 16, 16, 16);
+            pageLayout.spacing = 12f;
+            pageLayout.childControlHeight = true;
+            pageLayout.childControlWidth = true;
+            pageLayout.childForceExpandHeight = false;
+            pageLayout.childForceExpandWidth = true;
+
+            Transform header = CreateUsageGuideHeader(page.transform);
+            Button closeUsageGuideButton = AddUsageGuideBackButton(header, "返回");
+            TMP_Text title = AddText(
+                header,
+                "App 使用说明",
+                19,
+                FontStyles.Bold,
+                new Color32(244, 247, 251, 255));
+            title.alignment = TextAlignmentOptions.MidlineLeft;
+            LayoutElement titleLayout = title.gameObject.AddComponent<LayoutElement>();
+            titleLayout.minHeight = 38f;
+            titleLayout.preferredHeight = 38f;
+            titleLayout.flexibleWidth = 1f;
+
+            Transform scrollContent = CreateUsageGuideScrollView(page.transform);
+            TMP_Text usageGuideBodyText = AddText(
+                scrollContent,
+                UsageGuideFallback,
+                13,
+                FontStyles.Normal,
+                new Color32(213, 221, 232, 255));
+            usageGuideBodyText.gameObject.name = "Usage Guide Body";
+            usageGuideBodyText.alignment = TextAlignmentOptions.TopLeft;
+            usageGuideBodyText.textWrappingMode = TextWrappingModes.Normal;
+            usageGuideBodyText.overflowMode = TextOverflowModes.Overflow;
+            usageGuideBodyText.lineSpacing = 7f;
+            LayoutElement bodyLayout = usageGuideBodyText.gameObject.AddComponent<LayoutElement>();
+            bodyLayout.minWidth = 0f;
+            bodyLayout.flexibleWidth = 1f;
+            ContentSizeFitter bodyFitter = usageGuideBodyText.gameObject.AddComponent<ContentSizeFitter>();
+            bodyFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            FxTradeLocalization.Bind(
+                usageGuideBodyText,
+                "usage_guide_body",
+                UsageGuideFallback);
+
+            FxTradeUsageGuideWindow window = usageGuideOverlay.AddComponent<FxTradeUsageGuideWindow>();
+            window.Configure(closeUsageGuideButton, usageGuideBodyText);
         }
 
         private void CreateLoadingSpinnerDots(Transform parent)
@@ -1842,13 +2180,13 @@ namespace TestFXTrade.Fx.UI
         {
             GameObject actions = CreateUiObject("Header Actions", parent);
             LayoutElement actionsLayout = actions.AddComponent<LayoutElement>();
-            actionsLayout.minWidth = 76f;
-            actionsLayout.preferredWidth = 76f;
+            actionsLayout.minWidth = 116f;
+            actionsLayout.preferredWidth = 116f;
             actionsLayout.minHeight = 36f;
             actionsLayout.preferredHeight = 36f;
 
             HorizontalLayoutGroup group = actions.AddComponent<HorizontalLayoutGroup>();
-            group.spacing = 8f;
+            group.spacing = 6f;
             group.childAlignment = TextAnchor.MiddleRight;
             group.childControlHeight = true;
             group.childControlWidth = true;
@@ -1872,6 +2210,75 @@ namespace TestFXTrade.Fx.UI
             group.childForceExpandHeight = false;
             group.childForceExpandWidth = false;
             return row.transform;
+        }
+
+        private Transform CreateUsageGuideHeader(Transform parent)
+        {
+            GameObject row = CreateUiObject("Usage Guide Header", parent);
+            LayoutElement rowLayout = row.AddComponent<LayoutElement>();
+            rowLayout.minHeight = 40f;
+            rowLayout.preferredHeight = 40f;
+
+            HorizontalLayoutGroup group = row.AddComponent<HorizontalLayoutGroup>();
+            group.spacing = 10f;
+            group.childAlignment = TextAnchor.MiddleLeft;
+            group.childControlHeight = true;
+            group.childControlWidth = true;
+            group.childForceExpandHeight = false;
+            group.childForceExpandWidth = false;
+            return row.transform;
+        }
+
+        private Transform CreateUsageGuideScrollView(Transform parent)
+        {
+            GameObject scrollViewObject = CreateUiObject("Usage Guide Scroll View", parent);
+            Image scrollBackground = scrollViewObject.AddComponent<Image>();
+            scrollBackground.color = new Color32(10, 15, 22, 255);
+            Outline scrollOutline = scrollViewObject.AddComponent<Outline>();
+            scrollOutline.effectColor = new Color32(56, 74, 94, 130);
+            scrollOutline.effectDistance = new Vector2(1f, -1f);
+            LayoutElement scrollLayout = scrollViewObject.AddComponent<LayoutElement>();
+            scrollLayout.minHeight = 300f;
+            scrollLayout.flexibleHeight = 1f;
+            scrollLayout.flexibleWidth = 1f;
+
+            ScrollRect scrollRect = scrollViewObject.AddComponent<ScrollRect>();
+            scrollRect.horizontal = false;
+            scrollRect.vertical = true;
+            scrollRect.movementType = ScrollRect.MovementType.Elastic;
+            scrollRect.inertia = true;
+            scrollRect.scrollSensitivity = 28f;
+
+            GameObject viewport = CreateUiObject("Viewport", scrollViewObject.transform);
+            RectTransform viewportRect = viewport.GetComponent<RectTransform>();
+            Stretch(viewportRect);
+            viewportRect.offsetMin = new Vector2(1f, 1f);
+            viewportRect.offsetMax = new Vector2(-1f, -1f);
+            Image viewportImage = viewport.AddComponent<Image>();
+            viewportImage.color = new Color32(10, 15, 22, 255);
+            Mask mask = viewport.AddComponent<Mask>();
+            mask.showMaskGraphic = false;
+
+            GameObject content = CreateUiObject("Content", viewport.transform);
+            RectTransform contentRect = content.GetComponent<RectTransform>();
+            contentRect.anchorMin = new Vector2(0f, 1f);
+            contentRect.anchorMax = new Vector2(1f, 1f);
+            contentRect.pivot = new Vector2(0.5f, 1f);
+            contentRect.anchoredPosition = Vector2.zero;
+            contentRect.sizeDelta = Vector2.zero;
+            VerticalLayoutGroup contentLayout = content.AddComponent<VerticalLayoutGroup>();
+            contentLayout.padding = new RectOffset(12, 12, 12, 18);
+            contentLayout.childAlignment = TextAnchor.UpperLeft;
+            contentLayout.childControlHeight = true;
+            contentLayout.childControlWidth = true;
+            contentLayout.childForceExpandHeight = false;
+            contentLayout.childForceExpandWidth = true;
+            ContentSizeFitter contentFitter = content.AddComponent<ContentSizeFitter>();
+            contentFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            scrollRect.viewport = viewportRect;
+            scrollRect.content = contentRect;
+            return content.transform;
         }
 
         private TMP_Text AddQuoteText(Transform parent, string text)
@@ -2327,9 +2734,14 @@ namespace TestFXTrade.Fx.UI
             return button;
         }
 
-        private Button AddToolbarButton(Transform parent, string buttonText)
+        private Button AddToolbarButton(
+            Transform parent,
+            string buttonName,
+            string iconName,
+            Sprite iconSprite,
+            string fallbackText)
         {
-            GameObject buttonObject = CreateUiObject("Settings Button", parent);
+            GameObject buttonObject = CreateUiObject(buttonName, parent);
             Image background = buttonObject.AddComponent<Image>();
             background.color = new Color32(13, 19, 27, 255);
             Outline outline = buttonObject.AddComponent<Outline>();
@@ -2343,15 +2755,15 @@ namespace TestFXTrade.Fx.UI
             colors.pressedColor = new Color32(10, 28, 39, 255);
             button.colors = colors;
 
-            if (settingsIcon != null)
+            if (iconSprite != null)
             {
-                GameObject iconObject = CreateUiObject("Settings Icon", buttonObject.transform);
+                GameObject iconObject = CreateUiObject(iconName, buttonObject.transform);
                 RectTransform iconRect = iconObject.GetComponent<RectTransform>();
                 Stretch(iconRect);
                 iconRect.offsetMin = new Vector2(7f, 7f);
                 iconRect.offsetMax = new Vector2(-7f, -7f);
                 Image icon = iconObject.AddComponent<Image>();
-                icon.sprite = settingsIcon;
+                icon.sprite = iconSprite;
                 icon.color = Color.white;
                 icon.preserveAspect = true;
                 icon.raycastTarget = false;
@@ -2360,7 +2772,7 @@ namespace TestFXTrade.Fx.UI
             {
                 TMP_Text text = AddText(
                     buttonObject.transform,
-                    buttonText,
+                    fallbackText,
                     9,
                     FontStyles.Bold,
                     new Color32(223, 229, 237, 255));
@@ -2373,6 +2785,82 @@ namespace TestFXTrade.Fx.UI
             layout.preferredWidth = 36f;
             layout.minHeight = 36f;
             layout.preferredHeight = 36f;
+            return button;
+        }
+
+        private Button AddSettingsMenuButton(Transform parent, string buttonText)
+        {
+            GameObject buttonObject = CreateUiObject("Usage Guide Button", parent);
+            Image background = buttonObject.AddComponent<Image>();
+            background.color = new Color32(18, 28, 39, 255);
+            Outline outline = buttonObject.AddComponent<Outline>();
+            outline.effectColor = new Color32(49, 181, 233, 135);
+            outline.effectDistance = new Vector2(1f, -1f);
+
+            Button button = buttonObject.AddComponent<Button>();
+            button.targetGraphic = background;
+            ColorBlock colors = button.colors;
+            colors.highlightedColor = new Color32(27, 52, 68, 255);
+            colors.pressedColor = new Color32(12, 23, 32, 255);
+            button.colors = colors;
+
+            TMP_Text text = AddText(
+                buttonObject.transform,
+                buttonText,
+                12,
+                FontStyles.Bold,
+                new Color32(222, 231, 241, 255));
+            text.alignment = TextAlignmentOptions.MidlineLeft;
+            RectTransform textRect = text.GetComponent<RectTransform>();
+            Stretch(textRect);
+            textRect.offsetMin = new Vector2(12f, 0f);
+            textRect.offsetMax = new Vector2(-36f, 0f);
+
+            TMP_Text arrow = AddText(
+                buttonObject.transform,
+                "›",
+                20,
+                FontStyles.Normal,
+                new Color32(49, 181, 233, 255));
+            arrow.alignment = TextAlignmentOptions.Center;
+            RectTransform arrowRect = arrow.GetComponent<RectTransform>();
+            arrowRect.anchorMin = new Vector2(1f, 0f);
+            arrowRect.anchorMax = Vector2.one;
+            arrowRect.pivot = new Vector2(1f, 0.5f);
+            arrowRect.offsetMin = new Vector2(-34f, 0f);
+            arrowRect.offsetMax = new Vector2(-4f, 0f);
+
+            LayoutElement layout = buttonObject.AddComponent<LayoutElement>();
+            layout.minHeight = 36f;
+            layout.preferredHeight = 36f;
+            return button;
+        }
+
+        private Button AddUsageGuideBackButton(Transform parent, string buttonText)
+        {
+            GameObject buttonObject = CreateUiObject("Back Button", parent);
+            Image background = buttonObject.AddComponent<Image>();
+            background.color = new Color32(13, 19, 27, 255);
+            Outline outline = buttonObject.AddComponent<Outline>();
+            outline.effectColor = new Color32(49, 181, 233, 135);
+            outline.effectDistance = new Vector2(1f, -1f);
+
+            Button button = buttonObject.AddComponent<Button>();
+            button.targetGraphic = background;
+            TMP_Text text = AddText(
+                buttonObject.transform,
+                buttonText,
+                11,
+                FontStyles.Bold,
+                new Color32(222, 231, 241, 255));
+            text.alignment = TextAlignmentOptions.Center;
+            Stretch(text.GetComponent<RectTransform>());
+
+            LayoutElement layout = buttonObject.AddComponent<LayoutElement>();
+            layout.minWidth = 62f;
+            layout.preferredWidth = 62f;
+            layout.minHeight = 34f;
+            layout.preferredHeight = 34f;
             return button;
         }
 

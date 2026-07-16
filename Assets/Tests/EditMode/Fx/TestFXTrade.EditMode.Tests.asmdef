@@ -3,6 +3,8 @@
     "rootNamespace": "",
     "references": [
         "TestFXTrade.Fx",
+        "Unity.Addressables",
+        "Unity.Addressables.Editor",
         "Unity.Localization",
         "Unity.ResourceManager",
         "Unity.TextMeshPro"
