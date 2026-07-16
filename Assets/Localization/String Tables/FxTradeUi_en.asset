@@ -454,6 +454,18 @@ MonoBehaviour:
     m_Localized: AI advice is informational and not investment advice.
     m_Metadata:
       m_Items: []
+  - m_Id: 3094339649
+    m_Localized: Settings
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339650
+    m_Localized: Choose the interface language here.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339651
+    m_Localized: Close
+    m_Metadata:
+      m_Items: []
   references:
     version: 2
     RefIds: []

@@ -24,6 +24,7 @@ namespace TestFXTrade.Fx.UI
         private const float CandleRefreshSeconds = 60f;
         private const int CandleOutputSize = 160;
         private const int DynamicFontSize = 90;
+        private const string PageResourcePath = "Pages/FxTradeAdvisorPage";
         private const string BundledChineseFontResourcePath = "Fonts/NotoSansSC-Regular";
         private const string ChineseFontProbeText = "中文交易建议保证金行情规则买卖建玉数量通貨同步均价建仓";
         private const NumberStyles UserNumberStyles = NumberStyles.Float | NumberStyles.AllowThousands;
@@ -49,27 +50,35 @@ namespace TestFXTrade.Fx.UI
         };
 
         private TMP_FontAsset font;
-        private TMP_InputField principalInput;
-        private TMP_InputField netPositionInput;
-        private TMP_InputField positionEntryPriceInput;
-        private TMP_Dropdown intervalDropdown;
-        private TMP_Dropdown languageDropdown;
-        private Toggle autoRefreshToggle;
-        private Button syncSbiRulesButton;
-        private Button requestAiAdviceButton;
-        private Button aggressiveAiAdviceButton;
-        private TMP_Text marketSourceText;
-        private TMP_Text statusText;
-        private TMP_Text sbiRulesText;
-        private TMP_Text quoteText;
-        private TMP_Text metricsText;
-        private TMP_Text recommendationText;
-        private TMP_Text warningsText;
-        private UsdJpyTrendLineGraphic chartGraphic;
-        private CanvasScaler canvasScaler;
-        private RectTransform safeAreaContentRect;
-        private GameObject loadingIndicator;
-        private RectTransform loadingSpinnerRect;
+
+        [Header("Page Prefab UI")]
+        [SerializeField] private Canvas uiCanvas;
+        [SerializeField] private CanvasScaler canvasScaler;
+        [SerializeField] private RectTransform safeAreaContentRect;
+        [SerializeField] private TMP_InputField principalInput;
+        [SerializeField] private TMP_InputField netPositionInput;
+        [SerializeField] private TMP_InputField positionEntryPriceInput;
+        [SerializeField] private TMP_Dropdown intervalDropdown;
+        [SerializeField] private TMP_Dropdown languageDropdown;
+        [SerializeField] private Sprite settingsIcon;
+        [SerializeField] private Button settingsButton;
+        [SerializeField] private GameObject settingsOverlay;
+        [SerializeField] private Button closeSettingsButton;
+        [SerializeField] private Toggle autoRefreshToggle;
+        [SerializeField] private Button refreshMarketButton;
+        [SerializeField] private Button syncSbiRulesButton;
+        [SerializeField] private Button requestAiAdviceButton;
+        [SerializeField] private Button aggressiveAiAdviceButton;
+        [SerializeField] private TMP_Text marketSourceText;
+        [SerializeField] private TMP_Text statusText;
+        [SerializeField] private TMP_Text sbiRulesText;
+        [SerializeField] private TMP_Text quoteText;
+        [SerializeField] private TMP_Text metricsText;
+        [SerializeField] private TMP_Text recommendationText;
+        [SerializeField] private TMP_Text warningsText;
+        [SerializeField] private UsdJpyTrendLineGraphic chartGraphic;
+        [SerializeField] private GameObject loadingIndicator;
+        [SerializeField] private RectTransform loadingSpinnerRect;
         private Rect lastSafeArea = new Rect(-1f, -1f, -1f, -1f);
         private Vector2Int lastScreenSize = new Vector2Int(-1, -1);
 
@@ -104,8 +113,26 @@ namespace TestFXTrade.Fx.UI
                 return;
             }
 
-            GameObject app = new GameObject("USDJPY Trade Advisor App");
-            app.AddComponent<FxTradeAdvisorApp>();
+            GameObject pagePrefab = Resources.Load<GameObject>(PageResourcePath);
+            if (pagePrefab != null)
+            {
+                GameObject page = UnityEngine.Object.Instantiate(pagePrefab);
+                page.name = pagePrefab.name;
+                if (page.GetComponent<FxTradeAdvisorApp>() != null)
+                {
+                    return;
+                }
+
+                Debug.LogError($"The page resource '{PageResourcePath}' does not contain FxTradeAdvisorApp.");
+                UnityEngine.Object.Destroy(page);
+            }
+            else
+            {
+                Debug.LogError($"Could not load the UI page resource '{PageResourcePath}'.");
+            }
+
+            GameObject fallbackApp = new GameObject("USDJPY Trade Advisor App");
+            fallbackApp.AddComponent<FxTradeAdvisorApp>();
         }
 
         private void Awake()
@@ -113,7 +140,24 @@ namespace TestFXTrade.Fx.UI
             ConfigurePortraitRuntime();
             FxTradeLocalization.ApplySavedLocale();
             font = CreateChineseUiFont();
-            BuildUi();
+
+            if (uiCanvas == null)
+            {
+                BuildUi();
+                return;
+            }
+
+            if (!HasCompleteSceneUiReferences())
+            {
+                Debug.LogError(
+                    "The page prefab is missing one or more FxTradeAdvisorApp UI references. " +
+                    "Rebuild it from Tools/FX Trade/Rebuild Advisor Page Prefab.",
+                    this);
+                enabled = false;
+                return;
+            }
+
+            PrepareBoundSceneUi();
         }
 
         private void Start()
@@ -184,15 +228,26 @@ namespace TestFXTrade.Fx.UI
             RectTransform rootRect = root.GetComponent<RectTransform>();
             Stretch(rootRect);
             Image rootBackground = root.AddComponent<Image>();
-            rootBackground.color = new Color32(18, 20, 23, 255);
+            rootBackground.color = new Color32(10, 14, 20, 255);
+
+            GameObject topAccent = CreateUiObject("Top Accent", root.transform);
+            RectTransform topAccentRect = topAccent.GetComponent<RectTransform>();
+            topAccentRect.anchorMin = new Vector2(0f, 1f);
+            topAccentRect.anchorMax = Vector2.one;
+            topAccentRect.pivot = new Vector2(0.5f, 1f);
+            topAccentRect.offsetMin = new Vector2(0f, -3f);
+            topAccentRect.offsetMax = Vector2.zero;
+            Image topAccentImage = topAccent.AddComponent<Image>();
+            topAccentImage.color = new Color32(49, 181, 233, 210);
+            topAccentImage.raycastTarget = false;
 
             GameObject content = CreateUiObject("Safe Area Content", root.transform);
             safeAreaContentRect = content.GetComponent<RectTransform>();
             Stretch(safeAreaContentRect);
 
             VerticalLayoutGroup contentGroup = content.AddComponent<VerticalLayoutGroup>();
-            contentGroup.padding = new RectOffset(10, 10, 8, 8);
-            contentGroup.spacing = 4;
+            contentGroup.padding = new RectOffset(12, 12, 12, 12);
+            contentGroup.spacing = 8;
             contentGroup.childControlWidth = true;
             contentGroup.childControlHeight = true;
             contentGroup.childForceExpandWidth = true;
@@ -201,70 +256,210 @@ namespace TestFXTrade.Fx.UI
             BuildMarketControls(content.transform);
             BuildInputColumn(content.transform);
             BuildOutputColumn(content.transform);
-            BuildLoadingIndicator(content.transform);
+            BuildSettingsOverlay(root.transform);
             BindStaticUiTexts(root.transform);
+            BindUiEvents();
             RefreshAdaptiveLayout(true);
+        }
+
+        private bool HasCompleteSceneUiReferences()
+        {
+            return canvasScaler != null &&
+                   safeAreaContentRect != null &&
+                   principalInput != null &&
+                   netPositionInput != null &&
+                   positionEntryPriceInput != null &&
+                   intervalDropdown != null &&
+                   languageDropdown != null &&
+                   settingsIcon != null &&
+                   settingsButton != null &&
+                   settingsOverlay != null &&
+                   closeSettingsButton != null &&
+                   autoRefreshToggle != null &&
+                   refreshMarketButton != null &&
+                   syncSbiRulesButton != null &&
+                   requestAiAdviceButton != null &&
+                   aggressiveAiAdviceButton != null &&
+                   marketSourceText != null &&
+                   statusText != null &&
+                   sbiRulesText != null &&
+                   quoteText != null &&
+                   metricsText != null &&
+                   recommendationText != null &&
+                   warningsText != null &&
+                   chartGraphic != null &&
+                   loadingIndicator != null &&
+                   loadingSpinnerRect != null;
+        }
+
+        private void PrepareBoundSceneUi()
+        {
+            EnsureEventSystem();
+            ApplyRuntimeFontToCanvas();
+            BindStaticUiTexts(uiCanvas.transform);
+            BindUiEvents();
+            RefreshAdaptiveLayout(true);
+        }
+
+        private void ApplyRuntimeFontToCanvas()
+        {
+            if (font == null || uiCanvas == null)
+            {
+                return;
+            }
+
+            TMP_Text[] texts = uiCanvas.GetComponentsInChildren<TMP_Text>(true);
+            for (int i = 0; i < texts.Length; i++)
+            {
+                texts[i].font = font;
+            }
+        }
+
+        private void BindUiEvents()
+        {
+            languageDropdown.onValueChanged.RemoveListener(OnLanguageSelected);
+            languageDropdown.onValueChanged.AddListener(OnLanguageSelected);
+
+            settingsButton.onClick.RemoveListener(OnSettingsClicked);
+            settingsButton.onClick.AddListener(OnSettingsClicked);
+
+            closeSettingsButton.onClick.RemoveListener(OnCloseSettingsClicked);
+            closeSettingsButton.onClick.AddListener(OnCloseSettingsClicked);
+
+            intervalDropdown.onValueChanged.RemoveListener(OnIntervalSelected);
+            intervalDropdown.onValueChanged.AddListener(OnIntervalSelected);
+
+            refreshMarketButton.onClick.RemoveListener(OnRefreshMarketClicked);
+            refreshMarketButton.onClick.AddListener(OnRefreshMarketClicked);
+
+            syncSbiRulesButton.onClick.RemoveListener(OnSyncSbiRulesClicked);
+            syncSbiRulesButton.onClick.AddListener(OnSyncSbiRulesClicked);
+
+            requestAiAdviceButton.onClick.RemoveListener(OnConservativeAdviceClicked);
+            requestAiAdviceButton.onClick.AddListener(OnConservativeAdviceClicked);
+
+            aggressiveAiAdviceButton.onClick.RemoveListener(OnAggressiveAdviceClicked);
+            aggressiveAiAdviceButton.onClick.AddListener(OnAggressiveAdviceClicked);
+        }
+
+        private void OnIntervalSelected(int unused)
+        {
+            _ = RefreshCandlesAndQuoteAsync(true);
+        }
+
+        private void OnRefreshMarketClicked()
+        {
+            _ = RefreshCandlesAndQuoteAsync(true);
+        }
+
+        private void OnSyncSbiRulesClicked()
+        {
+            _ = SyncSbiRulesAsync();
+        }
+
+        private void OnConservativeAdviceClicked()
+        {
+            _ = RequestAiAdviceAsync(AiTradeAdviceMode.Conservative);
+        }
+
+        private void OnAggressiveAdviceClicked()
+        {
+            _ = RequestAiAdviceAsync(AiTradeAdviceMode.ForcedDirectional);
+        }
+
+        private void OnSettingsClicked()
+        {
+            settingsOverlay.SetActive(true);
+            settingsOverlay.transform.SetAsLastSibling();
+        }
+
+        private void OnCloseSettingsClicked()
+        {
+            settingsOverlay.SetActive(false);
         }
 
         private void BuildMarketControls(Transform parent)
         {
-            AddHeader(parent, "USD/JPY 交易助手");
-            marketSourceText = AddCompactInfoText(parent, "正在读取 Azure 中转配置……");
+            Transform headerCard = CreateCardSection(
+                parent,
+                "Header Card",
+                new Color32(20, 28, 38, 255),
+                70f,
+                70f,
+                8,
+                0f);
+            Transform headerBar = CreateHeaderBar(headerCard);
+            Transform brandBlock = CreateBrandBlock(headerBar);
+            AddHeader(brandBlock, "USD/JPY 交易助手");
+            marketSourceText = AddCompactInfoText(brandBlock, "正在读取 Azure 中转配置……");
 
-            Transform languageControls = CreateCompactFieldRow(parent, "Language Controls");
-            languageDropdown = AddDropdown(
-                languageControls,
-                "语言",
-                new List<string>(FxTradeLocalization.NativeLocaleNames),
-                FxTradeLocalization.GetSelectedLocaleIndex());
-            languageDropdown.onValueChanged.AddListener(OnLanguageSelected);
+            Transform headerActions = CreateHeaderActions(headerBar);
+            BuildLoadingIndicator(headerActions);
+            settingsButton = AddToolbarButton(headerActions, "设置");
 
-            Transform controls = CreateCompactFieldRow(parent, "Market Controls");
+            Transform marketCard = CreateCardSection(
+                parent,
+                "Market Overview Card",
+                new Color32(18, 24, 33, 255),
+                86f,
+                86f,
+                8,
+                4f);
+            Transform controls = CreateCompactFieldRow(marketCard, "Market Controls");
             AddValueRow(controls, "交易对", FxConstants.UsdJpySymbol);
             intervalDropdown = AddDropdown(controls, "周期", new List<string> { "1min", "5min", "15min" }, 1);
-            intervalDropdown.onValueChanged.AddListener(unused => { _ = RefreshCandlesAndQuoteAsync(true); });
             autoRefreshToggle = AddToggle(controls, "实时 5秒", true);
 
-            Button refreshButton = AddButton(controls, "手动行情", "刷新");
-            refreshButton.onClick.AddListener(() => _ = RefreshCandlesAndQuoteAsync(true));
+            refreshMarketButton = AddButton(controls, "手动行情", "刷新");
 
-            statusText = AddCompactInfoText(parent, string.Empty);
-            statusText.color = new Color32(190, 198, 210, 255);
+            statusText = AddCompactInfoText(marketCard, string.Empty);
+            statusText.color = new Color32(152, 202, 221, 255);
         }
 
         private void BuildInputColumn(Transform parent)
         {
-            Transform smartFields = CreateCompactSection(parent, "智能建议");
-            LayoutElement smartSectionLayout = smartFields.parent.GetComponent<LayoutElement>();
-            smartSectionLayout.minHeight = 110;
-            smartSectionLayout.preferredHeight = 110;
+            Transform advisorCard = CreateCardSection(
+                parent,
+                "Advisor Setup Card",
+                new Color32(18, 24, 33, 255),
+                166f,
+                166f,
+                10,
+                4f);
+            AddSectionTitle(advisorCard, "智能建议");
+            Transform smartFields = CreateCompactFieldRow(advisorCard, "Smart Advice Fields");
 
             principalInput = AddInput(smartFields, "本金 JPY", "1000000", false, TMP_InputField.ContentType.Standard);
             netPositionInput = AddInput(smartFields, "净建玉数量", "0", false, TMP_InputField.ContentType.Standard);
             positionEntryPriceInput = AddInput(smartFields, "USD/JPY均价", string.Empty, false, TMP_InputField.ContentType.DecimalNumber);
 
             syncSbiRulesButton = AddButton(smartFields, "SBI规则", "同步");
-            syncSbiRulesButton.onClick.AddListener(() => _ = SyncSbiRulesAsync());
 
-            Transform adviceActions = CreateCompactFieldRow(smartFields.parent, "AI Advice Actions");
+            Transform adviceActions = CreateCompactFieldRow(advisorCard, "AI Advice Actions");
             requestAiAdviceButton = AddButton(adviceActions, "稳健建议", "获取");
-            requestAiAdviceButton.onClick.AddListener(() => _ = RequestAiAdviceAsync(AiTradeAdviceMode.Conservative));
 
             aggressiveAiAdviceButton = AddButton(adviceActions, "积极建议", "买/卖必选");
             aggressiveAiAdviceButton.targetGraphic.color = new Color32(175, 101, 52, 255);
-            aggressiveAiAdviceButton.onClick.AddListener(() => _ = RequestAiAdviceAsync(AiTradeAdviceMode.ForcedDirectional));
 
-            sbiRulesText = AddCompactInfoText(parent, "SBI规则：尚未同步。");
+            sbiRulesText = AddCompactInfoText(advisorCard, "SBI规则：尚未同步。");
         }
 
         private void BuildOutputColumn(Transform parent)
         {
-            quoteText = AddQuoteText(parent, "正在等待 USD/JPY 实时行情");
+            Transform insightCard = CreateCardSection(
+                parent,
+                "Market Insight Card",
+                new Color32(16, 22, 30, 255),
+                192f,
+                192f,
+                8,
+                4f);
+            quoteText = AddQuoteText(insightCard, "正在等待 USD/JPY 实时行情");
 
-            GameObject chartPanel = CreatePanel("ChartPanel", parent, new Color32(12, 14, 17, 255));
+            GameObject chartPanel = CreatePanel("ChartPanel", insightCard, new Color32(9, 14, 20, 255));
             LayoutElement chartLayout = chartPanel.AddComponent<LayoutElement>();
-            chartLayout.minHeight = 56;
-            chartLayout.preferredHeight = 60;
+            chartLayout.minHeight = 84;
+            chartLayout.preferredHeight = 88;
             chartLayout.flexibleWidth = 1;
             chartLayout.flexibleHeight = 0;
             GameObject chartLine = CreateUiObject("ChartLine", chartPanel.transform);
@@ -277,19 +472,40 @@ namespace TestFXTrade.Fx.UI
             chartGraphic.color = Color.white;
             chartGraphic.raycastTarget = false;
 
-            metricsText = AddBodyText(parent, "行情指标将在此显示。");
-            recommendationText = AddBodyText(parent, "输入本金和净建玉数量，同步SBI规则后即可获取AI建议。");
+            metricsText = AddBodyText(insightCard, "行情指标将在此显示。");
+            LayoutElement metricsLayout = metricsText.GetComponent<LayoutElement>();
+            metricsLayout.minHeight = 44f;
+            metricsLayout.preferredHeight = 44f;
+
+            Transform adviceCard = CreateCardSection(
+                parent,
+                "Advice Card",
+                new Color32(20, 27, 37, 255),
+                116f,
+                116f,
+                10,
+                0f,
+                1f);
+            recommendationText = AddBodyText(adviceCard, "输入本金和净建玉数量，同步SBI规则后即可获取AI建议。");
             recommendationText.gameObject.name = "AI Advice Text";
             LayoutElement recommendationLayout = recommendationText.GetComponent<LayoutElement>();
-            recommendationLayout.minHeight = 104;
-            recommendationLayout.preferredHeight = 108;
+            recommendationLayout.minHeight = 92;
+            recommendationLayout.preferredHeight = 96;
             recommendationLayout.flexibleHeight = 1;
             recommendationText.fontSize = 12;
             recommendationText.color = new Color32(234, 239, 246, 255);
-            warningsText = AddBodyText(parent, string.Empty);
+            Transform warningCard = CreateCardSection(
+                parent,
+                "Warning Card",
+                new Color32(42, 32, 21, 255),
+                44f,
+                44f,
+                8,
+                0f);
+            warningsText = AddBodyText(warningCard, string.Empty);
             LayoutElement warningsLayout = warningsText.GetComponent<LayoutElement>();
-            warningsLayout.minHeight = 36;
-            warningsLayout.preferredHeight = 36;
+            warningsLayout.minHeight = 28;
+            warningsLayout.preferredHeight = 28;
             warningsText.color = new Color32(244, 192, 102, 255);
         }
 
@@ -353,6 +569,15 @@ namespace TestFXTrade.Fx.UI
                         break;
                     case "语言":
                         FxTradeLocalization.Bind(text, "label_language", text.text);
+                        break;
+                    case "设置":
+                        FxTradeLocalization.Bind(text, "button_settings", text.text);
+                        break;
+                    case "在这里选择界面语言。":
+                        FxTradeLocalization.Bind(text, "settings_language_description", text.text);
+                        break;
+                    case "关闭":
+                        FxTradeLocalization.Bind(text, "button_close", text.text);
                         break;
                     case "手动行情":
                         FxTradeLocalization.Bind(text, "label_manual_market", text.text);
@@ -793,17 +1018,20 @@ namespace TestFXTrade.Fx.UI
         {
             loadingIndicator = CreateUiObject("Loading Indicator", parent);
             RectTransform indicatorRect = loadingIndicator.GetComponent<RectTransform>();
-            indicatorRect.anchorMin = Vector2.one;
-            indicatorRect.anchorMax = Vector2.one;
-            indicatorRect.pivot = Vector2.one;
-            indicatorRect.anchoredPosition = new Vector2(-2f, -2f);
             indicatorRect.sizeDelta = new Vector2(32f, 32f);
             LayoutElement indicatorLayout = loadingIndicator.AddComponent<LayoutElement>();
-            indicatorLayout.ignoreLayout = true;
+            indicatorLayout.minWidth = 32f;
+            indicatorLayout.preferredWidth = 32f;
+            indicatorLayout.minHeight = 32f;
+            indicatorLayout.preferredHeight = 32f;
 
             Image indicatorBackground = loadingIndicator.AddComponent<Image>();
-            indicatorBackground.color = new Color32(25, 29, 34, 230);
+            indicatorBackground.color = new Color32(13, 19, 27, 245);
             indicatorBackground.raycastTarget = false;
+
+            Outline indicatorOutline = loadingIndicator.AddComponent<Outline>();
+            indicatorOutline.effectColor = new Color32(49, 181, 233, 125);
+            indicatorOutline.effectDistance = new Vector2(1f, -1f);
 
             GameObject spinner = CreateUiObject("Loading Spinner", loadingIndicator.transform);
             loadingSpinnerRect = spinner.GetComponent<RectTransform>();
@@ -811,10 +1039,89 @@ namespace TestFXTrade.Fx.UI
             loadingSpinnerRect.anchorMax = new Vector2(0.5f, 0.5f);
             loadingSpinnerRect.pivot = new Vector2(0.5f, 0.5f);
             loadingSpinnerRect.anchoredPosition = Vector2.zero;
-            loadingSpinnerRect.sizeDelta = new Vector2(22f, 22f);
+            loadingSpinnerRect.sizeDelta = new Vector2(20f, 20f);
             CreateLoadingSpinnerDots(spinner.transform);
 
             loadingIndicator.SetActive(false);
+        }
+
+        private void BuildSettingsOverlay(Transform parent)
+        {
+            settingsOverlay = CreateUiObject("Settings Overlay", parent);
+            RectTransform overlayRect = settingsOverlay.GetComponent<RectTransform>();
+            Stretch(overlayRect);
+            Image overlayBackground = settingsOverlay.AddComponent<Image>();
+            overlayBackground.color = new Color32(5, 7, 10, 190);
+
+            GameObject panel = CreatePanel(
+                "Settings Panel",
+                settingsOverlay.transform,
+                new Color32(31, 35, 41, 255));
+            RectTransform panelRect = panel.GetComponent<RectTransform>();
+            panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+            panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+            panelRect.pivot = new Vector2(0.5f, 0.5f);
+            panelRect.anchoredPosition = Vector2.zero;
+            panelRect.sizeDelta = new Vector2(324f, 208f);
+
+            Outline outline = panel.AddComponent<Outline>();
+            outline.effectColor = new Color32(84, 99, 116, 180);
+            outline.effectDistance = new Vector2(1f, -1f);
+
+            VerticalLayoutGroup group = panel.AddComponent<VerticalLayoutGroup>();
+            group.padding = new RectOffset(18, 18, 16, 16);
+            group.spacing = 10f;
+            group.childControlHeight = true;
+            group.childControlWidth = true;
+            group.childForceExpandHeight = false;
+            group.childForceExpandWidth = true;
+
+            Transform titleRow = CreateSettingsTitleRow(panel.transform);
+            if (settingsIcon != null)
+            {
+                GameObject iconObject = CreateUiObject("Settings Title Icon", titleRow);
+                Image icon = iconObject.AddComponent<Image>();
+                icon.sprite = settingsIcon;
+                icon.color = Color.white;
+                icon.preserveAspect = true;
+                icon.raycastTarget = false;
+                LayoutElement iconLayout = iconObject.AddComponent<LayoutElement>();
+                iconLayout.minWidth = 24f;
+                iconLayout.preferredWidth = 24f;
+                iconLayout.minHeight = 24f;
+                iconLayout.preferredHeight = 24f;
+            }
+
+            TMP_Text title = AddText(
+                titleRow,
+                "设置",
+                18,
+                FontStyles.Bold,
+                new Color32(244, 247, 251, 255));
+            LayoutElement titleLayout = title.gameObject.AddComponent<LayoutElement>();
+            titleLayout.minHeight = 26f;
+            titleLayout.preferredHeight = 26f;
+            titleLayout.flexibleWidth = 1f;
+
+            TMP_Text description = AddText(
+                panel.transform,
+                "在这里选择界面语言。",
+                11,
+                FontStyles.Normal,
+                new Color32(170, 178, 190, 255));
+            LayoutElement descriptionLayout = description.gameObject.AddComponent<LayoutElement>();
+            descriptionLayout.minHeight = 18f;
+            descriptionLayout.preferredHeight = 18f;
+
+            Transform languageControls = CreateCompactFieldRow(panel.transform, "Language Settings");
+            languageDropdown = AddDropdown(
+                languageControls,
+                "语言",
+                new List<string>(FxTradeLocalization.NativeLocaleNames),
+                FxTradeLocalization.GetSelectedLocaleIndex());
+
+            closeSettingsButton = AddModalButton(panel.transform, "关闭");
+            settingsOverlay.SetActive(false);
         }
 
         private void CreateLoadingSpinnerDots(Transform parent)
@@ -853,7 +1160,8 @@ namespace TestFXTrade.Fx.UI
             if (loadingIndicator != null)
             {
                 loadingIndicator.SetActive(true);
-                loadingIndicator.transform.SetAsLastSibling();
+                LayoutRebuilder.ForceRebuildLayoutImmediate(
+                    loadingIndicator.transform.parent as RectTransform);
             }
         }
 
@@ -876,6 +1184,8 @@ namespace TestFXTrade.Fx.UI
             if (loadingIndicator != null)
             {
                 loadingIndicator.SetActive(false);
+                LayoutRebuilder.ForceRebuildLayoutImmediate(
+                    loadingIndicator.transform.parent as RectTransform);
             }
         }
 
@@ -1404,13 +1714,32 @@ namespace TestFXTrade.Fx.UI
 
         private Canvas CreateCanvas()
         {
-            GameObject canvasObject = new GameObject("USDJPY Advisor Canvas");
-            Canvas canvas = canvasObject.AddComponent<Canvas>();
+            Canvas canvas = GetComponent<Canvas>();
+            GameObject canvasObject;
+            if (canvas == null)
+            {
+                canvasObject = new GameObject("USDJPY Advisor Canvas");
+                canvas = canvasObject.AddComponent<Canvas>();
+            }
+            else
+            {
+                canvasObject = gameObject;
+            }
+
+            uiCanvas = canvas;
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 100;
-            canvasObject.AddComponent<GraphicRaycaster>();
+            if (canvasObject.GetComponent<GraphicRaycaster>() == null)
+            {
+                canvasObject.AddComponent<GraphicRaycaster>();
+            }
 
-            canvasScaler = canvasObject.AddComponent<CanvasScaler>();
+            canvasScaler = canvasObject.GetComponent<CanvasScaler>();
+            if (canvasScaler == null)
+            {
+                canvasScaler = canvasObject.AddComponent<CanvasScaler>();
+            }
+
             canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             canvasScaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
             canvasScaler.referenceResolution = MobileReferenceResolution;
@@ -1423,6 +1752,37 @@ namespace TestFXTrade.Fx.UI
             Image image = panel.AddComponent<Image>();
             image.color = color;
             return panel;
+        }
+
+        private Transform CreateCardSection(
+            Transform parent,
+            string name,
+            Color32 color,
+            float minHeight,
+            float preferredHeight,
+            int padding,
+            float spacing,
+            float flexibleHeight = 0f)
+        {
+            GameObject card = CreatePanel(name, parent, color);
+            LayoutElement cardLayout = card.AddComponent<LayoutElement>();
+            cardLayout.minHeight = minHeight;
+            cardLayout.preferredHeight = preferredHeight;
+            cardLayout.flexibleHeight = flexibleHeight;
+            cardLayout.flexibleWidth = 1f;
+
+            Outline outline = card.AddComponent<Outline>();
+            outline.effectColor = new Color32(64, 82, 103, 125);
+            outline.effectDistance = new Vector2(1f, -1f);
+
+            VerticalLayoutGroup group = card.AddComponent<VerticalLayoutGroup>();
+            group.padding = new RectOffset(padding, padding, padding, padding);
+            group.spacing = spacing;
+            group.childControlHeight = true;
+            group.childControlWidth = true;
+            group.childForceExpandHeight = false;
+            group.childForceExpandWidth = true;
+            return card.transform;
         }
 
         private GameObject CreateUiObject(string name, Transform parent)
@@ -1440,7 +1800,78 @@ namespace TestFXTrade.Fx.UI
             LayoutElement layout = label.gameObject.AddComponent<LayoutElement>();
             layout.minHeight = 32;
             layout.preferredHeight = 32;
+            layout.flexibleWidth = 1;
             return label;
+        }
+
+        private Transform CreateHeaderBar(Transform parent)
+        {
+            GameObject row = CreateUiObject("Header Bar", parent);
+            LayoutElement rowLayout = row.AddComponent<LayoutElement>();
+            rowLayout.minHeight = 54f;
+            rowLayout.preferredHeight = 54f;
+
+            HorizontalLayoutGroup group = row.AddComponent<HorizontalLayoutGroup>();
+            group.spacing = 8f;
+            group.childAlignment = TextAnchor.MiddleCenter;
+            group.childControlHeight = true;
+            group.childControlWidth = true;
+            group.childForceExpandHeight = true;
+            group.childForceExpandWidth = false;
+            return row.transform;
+        }
+
+        private Transform CreateBrandBlock(Transform parent)
+        {
+            GameObject brand = CreateUiObject("Brand Block", parent);
+            LayoutElement brandLayout = brand.AddComponent<LayoutElement>();
+            brandLayout.minWidth = 0f;
+            brandLayout.flexibleWidth = 1f;
+
+            VerticalLayoutGroup group = brand.AddComponent<VerticalLayoutGroup>();
+            group.spacing = 0f;
+            group.childAlignment = TextAnchor.MiddleLeft;
+            group.childControlHeight = true;
+            group.childControlWidth = true;
+            group.childForceExpandHeight = false;
+            group.childForceExpandWidth = true;
+            return brand.transform;
+        }
+
+        private Transform CreateHeaderActions(Transform parent)
+        {
+            GameObject actions = CreateUiObject("Header Actions", parent);
+            LayoutElement actionsLayout = actions.AddComponent<LayoutElement>();
+            actionsLayout.minWidth = 76f;
+            actionsLayout.preferredWidth = 76f;
+            actionsLayout.minHeight = 36f;
+            actionsLayout.preferredHeight = 36f;
+
+            HorizontalLayoutGroup group = actions.AddComponent<HorizontalLayoutGroup>();
+            group.spacing = 8f;
+            group.childAlignment = TextAnchor.MiddleRight;
+            group.childControlHeight = true;
+            group.childControlWidth = true;
+            group.childForceExpandHeight = false;
+            group.childForceExpandWidth = false;
+            return actions.transform;
+        }
+
+        private Transform CreateSettingsTitleRow(Transform parent)
+        {
+            GameObject row = CreateUiObject("Settings Title Row", parent);
+            LayoutElement rowLayout = row.AddComponent<LayoutElement>();
+            rowLayout.minHeight = 26f;
+            rowLayout.preferredHeight = 26f;
+
+            HorizontalLayoutGroup group = row.AddComponent<HorizontalLayoutGroup>();
+            group.spacing = 8f;
+            group.childAlignment = TextAnchor.MiddleLeft;
+            group.childControlHeight = true;
+            group.childControlWidth = true;
+            group.childForceExpandHeight = false;
+            group.childForceExpandWidth = false;
+            return row.transform;
         }
 
         private TMP_Text AddQuoteText(Transform parent, string text)
@@ -1686,7 +2117,10 @@ namespace TestFXTrade.Fx.UI
         {
             GameObject textObject = CreateUiObject("Text", parent);
             TextMeshProUGUI text = textObject.AddComponent<TextMeshProUGUI>();
-            text.font = font;
+            if (font != null)
+            {
+                text.font = font;
+            }
             text.text = value;
             text.fontSize = size;
             text.fontStyle = style;
@@ -1740,7 +2174,10 @@ namespace TestFXTrade.Fx.UI
             rect.offsetMax = new Vector2(-6, -2);
 
             TextMeshProUGUI text = textObject.AddComponent<TextMeshProUGUI>();
-            text.font = font;
+            if (font != null)
+            {
+                text.font = font;
+            }
             text.fontSize = 12;
             text.color = new Color32(238, 242, 247, 255);
             text.text = value;
@@ -1887,6 +2324,73 @@ namespace TestFXTrade.Fx.UI
             LayoutElement layout = buttonObject.AddComponent<LayoutElement>();
             layout.minHeight = 32;
             layout.preferredHeight = 32;
+            return button;
+        }
+
+        private Button AddToolbarButton(Transform parent, string buttonText)
+        {
+            GameObject buttonObject = CreateUiObject("Settings Button", parent);
+            Image background = buttonObject.AddComponent<Image>();
+            background.color = new Color32(13, 19, 27, 255);
+            Outline outline = buttonObject.AddComponent<Outline>();
+            outline.effectColor = new Color32(49, 181, 233, 150);
+            outline.effectDistance = new Vector2(1f, -1f);
+
+            Button button = buttonObject.AddComponent<Button>();
+            button.targetGraphic = background;
+            ColorBlock colors = button.colors;
+            colors.highlightedColor = new Color32(27, 52, 68, 255);
+            colors.pressedColor = new Color32(10, 28, 39, 255);
+            button.colors = colors;
+
+            if (settingsIcon != null)
+            {
+                GameObject iconObject = CreateUiObject("Settings Icon", buttonObject.transform);
+                RectTransform iconRect = iconObject.GetComponent<RectTransform>();
+                Stretch(iconRect);
+                iconRect.offsetMin = new Vector2(7f, 7f);
+                iconRect.offsetMax = new Vector2(-7f, -7f);
+                Image icon = iconObject.AddComponent<Image>();
+                icon.sprite = settingsIcon;
+                icon.color = Color.white;
+                icon.preserveAspect = true;
+                icon.raycastTarget = false;
+            }
+            else
+            {
+                TMP_Text text = AddText(
+                    buttonObject.transform,
+                    buttonText,
+                    9,
+                    FontStyles.Bold,
+                    new Color32(223, 229, 237, 255));
+                text.alignment = TextAlignmentOptions.Center;
+                Stretch(text.GetComponent<RectTransform>());
+            }
+
+            LayoutElement layout = buttonObject.AddComponent<LayoutElement>();
+            layout.minWidth = 36f;
+            layout.preferredWidth = 36f;
+            layout.minHeight = 36f;
+            layout.preferredHeight = 36f;
+            return button;
+        }
+
+        private Button AddModalButton(Transform parent, string buttonText)
+        {
+            GameObject buttonObject = CreateUiObject("Close Settings Button", parent);
+            Image background = buttonObject.AddComponent<Image>();
+            background.color = new Color32(55, 132, 93, 255);
+            Button button = buttonObject.AddComponent<Button>();
+            button.targetGraphic = background;
+
+            TMP_Text text = AddText(buttonObject.transform, buttonText, 11, FontStyles.Bold, Color.white);
+            text.alignment = TextAlignmentOptions.Center;
+            Stretch(text.GetComponent<RectTransform>());
+
+            LayoutElement layout = buttonObject.AddComponent<LayoutElement>();
+            layout.minHeight = 32f;
+            layout.preferredHeight = 32f;
             return button;
         }
 

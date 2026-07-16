@@ -302,7 +302,7 @@ PlayerSettings:
   - m_BuildTarget: 
     m_Icons:
     - serializedVersion: 2
-      m_Icon: {fileID: 2800000, guid: 941125f0298204ea9b1cdda141fe1e8a, type: 3}
+      m_Icon: {fileID: 2800000, guid: b3c5c1d425b824748b4130f92326ac12, type: 3}
       m_Width: 128
       m_Height: 128
       m_Kind: 0
@@ -784,7 +784,8 @@ PlayerSettings:
   webGLCloseOnQuit: 0
   webWasm2023: 0
   webEnableSubmoduleStrippingCompatibility: 0
-  scriptingDefineSymbols: {}
+  scriptingDefineSymbols:
+    iPhone: SENTIS_ANALYTICS_ENABLED;APP_UI_EDITOR_ONLY
   additionalCompilerArguments: {}
   platformArchitecture: {}
   scriptingBackend:

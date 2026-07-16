@@ -5,11 +5,13 @@ using NUnit.Framework;
 using TestFXTrade.Fx.Domain;
 using TestFXTrade.Fx.UI;
 using TMPro;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.Localization;
 using UnityEngine.Localization.Components;
 using UnityEngine.Localization.Settings;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace TestFXTrade.Tests.EditMode.Fx
@@ -17,8 +19,103 @@ namespace TestFXTrade.Tests.EditMode.Fx
     public sealed class SmartAdvisorUiTests
     {
         [Test]
+        public void AdvisorPagePrefabIsBoundAndSampleSceneDoesNotStoreUi()
+        {
+            GameObject pagePrefab = Resources.Load<GameObject>("Pages/FxTradeAdvisorPage");
+            Assert.NotNull(pagePrefab);
+            Assert.AreEqual("FxTradeAdvisorPage", pagePrefab.name);
+            Assert.NotNull(pagePrefab.GetComponent<Canvas>());
+            Assert.NotNull(pagePrefab.GetComponent<CanvasScaler>());
+            Assert.NotNull(pagePrefab.GetComponent<GraphicRaycaster>());
+
+            FxTradeAdvisorApp app = pagePrefab.GetComponent<FxTradeAdvisorApp>();
+            Assert.NotNull(app);
+            MethodInfo hasCompleteReferences = typeof(FxTradeAdvisorApp).GetMethod(
+                "HasCompleteSceneUiReferences",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(hasCompleteReferences);
+            Assert.IsTrue((bool)hasCompleteReferences.Invoke(app, null));
+
+            Assert.NotNull(pagePrefab.transform.Find("Root/Safe Area Content"));
+            Assert.NotNull(pagePrefab.transform.Find("Root/Safe Area Content/Market Overview Card"));
+            Assert.NotNull(pagePrefab.transform.Find("Root/Safe Area Content/Advisor Setup Card"));
+            Assert.NotNull(pagePrefab.transform.Find("Root/Safe Area Content/Market Insight Card/ChartPanel/ChartLine"));
+            Assert.NotNull(pagePrefab.transform.Find("Root/Safe Area Content/Advice Card/AI Advice Text"));
+            Assert.NotNull(pagePrefab.transform.Find("Root/Safe Area Content/Warning Card"));
+            Assert.NotNull(pagePrefab.transform.Find("Root/Safe Area Content/Header Card/Header Bar/Header Actions/Loading Indicator"));
+            Transform prefabSettingsButton = pagePrefab.transform.Find(
+                "Root/Safe Area Content/Header Card/Header Bar/Header Actions/Settings Button");
+            Assert.NotNull(prefabSettingsButton);
+            Transform prefabSettingsIconTransform = prefabSettingsButton.Find("Settings Icon");
+            Assert.NotNull(prefabSettingsIconTransform);
+            Image prefabSettingsIcon = prefabSettingsIconTransform.GetComponent<Image>();
+            Assert.NotNull(prefabSettingsIcon);
+            Assert.NotNull(prefabSettingsIcon.sprite);
+            Assert.AreEqual("setting_17909217_0", prefabSettingsIcon.sprite.name);
+            Assert.IsNull(pagePrefab.transform.Find("Root/Safe Area Content/Language Controls"));
+            Transform settingsOverlay = pagePrefab.transform.Find("Root/Settings Overlay");
+            Assert.NotNull(settingsOverlay);
+            Assert.IsFalse(settingsOverlay.gameObject.activeSelf);
+            Assert.NotNull(settingsOverlay.Find("Settings Panel/Language Settings/语言 Field/语言 Dropdown"));
+            Assert.NotNull(settingsOverlay.Find("Settings Panel/Close Settings Button"));
+
+            Scene scene = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+
+            try
+            {
+                GameObject[] roots = scene.GetRootGameObjects();
+                for (int i = 0; i < roots.Length; i++)
+                {
+                    Assert.IsNull(roots[i].GetComponentInChildren<FxTradeAdvisorApp>(true));
+                    Assert.IsNull(roots[i].GetComponentInChildren<EventSystem>(true));
+                }
+            }
+            finally
+            {
+                EditorSceneManager.CloseScene(scene, true);
+            }
+        }
+
+        [Test]
+        public void BootstrapInstantiatesAdvisorPageResource()
+        {
+            EventSystem existingEventSystem = UnityEngine.Object.FindAnyObjectByType<EventSystem>();
+            FxTradeAdvisorApp pageApp = null;
+
+            try
+            {
+                Assert.IsNull(UnityEngine.Object.FindAnyObjectByType<FxTradeAdvisorApp>());
+                MethodInfo bootstrap = typeof(FxTradeAdvisorApp).GetMethod(
+                    "Bootstrap",
+                    BindingFlags.Static | BindingFlags.NonPublic);
+                Assert.NotNull(bootstrap);
+
+                bootstrap.Invoke(null, null);
+                pageApp = UnityEngine.Object.FindAnyObjectByType<FxTradeAdvisorApp>();
+                Assert.NotNull(pageApp);
+                Assert.AreEqual("FxTradeAdvisorPage", pageApp.gameObject.name);
+                Assert.NotNull(pageApp.GetComponent<Canvas>());
+            }
+            finally
+            {
+                if (pageApp != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(pageApp.gameObject);
+                }
+
+                EventSystem currentEventSystem = UnityEngine.Object.FindAnyObjectByType<EventSystem>();
+                if (existingEventSystem == null && currentEventSystem != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(currentEventSystem.gameObject);
+                }
+            }
+        }
+
+        [Test]
         public void PortraitAdvisorUsesTmpAndNonBlockingLoadingWithinReferenceHeight()
         {
+            LocalizationSettings.InitializationOperation.WaitForCompletion();
+            Locale originalLocale = LocalizationSettings.SelectedLocale;
             EventSystem existingEventSystem = UnityEngine.Object.FindAnyObjectByType<EventSystem>();
             GameObject host = new GameObject("UI Test Host");
             GameObject canvasObject = null;
@@ -29,6 +126,7 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 MethodInfo awake = typeof(FxTradeAdvisorApp).GetMethod("Awake", BindingFlags.Instance | BindingFlags.NonPublic);
                 Assert.NotNull(awake);
                 awake.Invoke(app, null);
+                Assert.IsTrue(FxTradeLocalization.TrySelectLocale("zh-Hans", false));
                 canvasObject = GameObject.Find("USDJPY Advisor Canvas");
                 Assert.NotNull(canvasObject);
 
@@ -77,7 +175,20 @@ namespace TestFXTrade.Tests.EditMode.Fx
 
                 Assert.IsTrue(hasPositionQuantityLabel);
                 Button[] buttons = canvasObject.GetComponentsInChildren<Button>(true);
-                Assert.AreEqual(4, buttons.Length);
+                Assert.AreEqual(6, buttons.Length);
+
+                Transform safeArea = canvasObject.transform.Find("Root/Safe Area Content");
+                Assert.NotNull(safeArea);
+                Assert.IsNull(safeArea.Find("Language Controls"));
+                Transform settingsButton = safeArea.Find("Header Card/Header Bar/Header Actions/Settings Button");
+                Transform settingsOverlay = canvasObject.transform.Find("Root/Settings Overlay");
+                Assert.NotNull(settingsButton);
+                Assert.NotNull(settingsOverlay);
+                Assert.IsFalse(settingsOverlay.gameObject.activeSelf);
+                settingsButton.GetComponent<Button>().onClick.Invoke();
+                Assert.IsTrue(settingsOverlay.gameObject.activeSelf);
+                settingsOverlay.Find("Settings Panel/Close Settings Button").GetComponent<Button>().onClick.Invoke();
+                Assert.IsFalse(settingsOverlay.gameObject.activeSelf);
 
                 accountInputs[0].SetTextWithoutNotify("1,000,000");
                 accountInputs[1].SetTextWithoutNotify("-10,000");
@@ -116,7 +227,8 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 Assert.That(normalized, Does.Not.Contain("lot"));
                 Assert.That(normalized, Does.Not.Contain("手数"));
 
-                Transform loadingIndicator = canvasObject.transform.Find("Root/Safe Area Content/Loading Indicator");
+                Transform loadingIndicator = canvasObject.transform.Find(
+                    "Root/Safe Area Content/Header Card/Header Bar/Header Actions/Loading Indicator");
                 Assert.NotNull(loadingIndicator);
                 Assert.IsFalse(loadingIndicator.gameObject.activeSelf);
                 Image indicatorBackground = loadingIndicator.GetComponent<Image>();
@@ -126,7 +238,7 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 RectTransform indicatorRect = loadingIndicator.GetComponent<RectTransform>();
                 Assert.LessOrEqual(indicatorRect.sizeDelta.x, 40f);
                 Assert.LessOrEqual(indicatorRect.sizeDelta.y, 40f);
-                Assert.IsTrue(loadingIndicator.GetComponent<LayoutElement>().ignoreLayout);
+                Assert.IsFalse(loadingIndicator.GetComponent<LayoutElement>().ignoreLayout);
 
                 MethodInfo beginLoading = typeof(FxTradeAdvisorApp).GetMethod("BeginLoading", BindingFlags.Instance | BindingFlags.NonPublic);
                 MethodInfo endLoading = typeof(FxTradeAdvisorApp).GetMethod("EndLoading", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -136,6 +248,14 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 beginLoading.Invoke(app, new object[] { "status_processing", "正在测试加载状态", Array.Empty<object>() });
                 beginLoading.Invoke(app, new object[] { "status_processing", "正在测试嵌套任务", Array.Empty<object>() });
                 Assert.IsTrue(loadingIndicator.gameObject.activeSelf);
+                Canvas.ForceUpdateCanvases();
+                RectTransform loadingRect = loadingIndicator.GetComponent<RectTransform>();
+                RectTransform settingsRect = settingsButton.GetComponent<RectTransform>();
+                Vector3[] loadingCorners = new Vector3[4];
+                Vector3[] settingsCorners = new Vector3[4];
+                loadingRect.GetWorldCorners(loadingCorners);
+                settingsRect.GetWorldCorners(settingsCorners);
+                Assert.LessOrEqual(loadingCorners[2].x, settingsCorners[0].x);
                 for (int i = 0; i < buttons.Length; i++)
                 {
                     Assert.IsTrue(buttons[i].interactable);
@@ -146,16 +266,14 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 endLoading.Invoke(app, null);
                 Assert.IsFalse(loadingIndicator.gameObject.activeSelf);
 
-                Transform safeArea = canvasObject.transform.Find("Root/Safe Area Content");
-                Assert.NotNull(safeArea);
                 Assert.IsNull(safeArea.GetComponent<ScrollRect>());
 
                 RectTransform safeAreaRect = safeArea.GetComponent<RectTransform>();
                 float preferredHeight = LayoutUtility.GetPreferredHeight(safeAreaRect);
                 Assert.LessOrEqual(preferredHeight, 844f);
 
-                Transform chartPanel = safeArea.Find("ChartPanel");
-                Transform adviceText = safeArea.Find("AI Advice Text");
+                Transform chartPanel = safeArea.Find("Market Insight Card/ChartPanel");
+                Transform adviceText = safeArea.Find("Advice Card/AI Advice Text");
                 Assert.NotNull(chartPanel);
                 Assert.NotNull(adviceText);
 
@@ -167,6 +285,8 @@ namespace TestFXTrade.Tests.EditMode.Fx
             }
             finally
             {
+                LocalizationSettings.SelectedLocale = originalLocale;
+
                 if (canvasObject != null)
                 {
                     UnityEngine.Object.DestroyImmediate(canvasObject);
@@ -203,6 +323,12 @@ namespace TestFXTrade.Tests.EditMode.Fx
             Assert.AreEqual(
                 "USD/JPY 取引アドバイザー",
                 LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "app_title", japanese));
+            Assert.AreEqual(
+                "Settings",
+                LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "button_settings", english));
+            Assert.AreEqual(
+                "閉じる",
+                LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "button_close", japanese));
 
             try
             {

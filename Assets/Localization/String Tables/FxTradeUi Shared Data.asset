@@ -427,6 +427,18 @@ MonoBehaviour:
     m_Key: warning_default
     m_Metadata:
       m_Items: []
+  - m_Id: 3094339649
+    m_Key: button_settings
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339650
+    m_Key: settings_language_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339651
+    m_Key: button_close
+    m_Metadata:
+      m_Items: []
   m_Metadata:
     m_Items: []
   m_KeyGenerator:
