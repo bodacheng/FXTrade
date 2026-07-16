@@ -12,26 +12,29 @@ namespace TestFXTrade.Fx.OpenAI
     {
         private const int PromptCandleCount = 32;
 
-        private const string CommonInstructions =
+        private const string CommonInstructionsPrefix =
             "You are a USD/JPY decision-support assistant. Return only the requested JSON schema. " +
-            "Answer all natural-language fields in Simplified Chinese. Treat the SBI FX rule snapshot as a hard margin constraint, " +
+            "Treat the SBI FX rule snapshot as a hard margin constraint, " +
             "not as a guarantee that a trade is safe. The JSON field suggested_lots remains the internal next-order size in " +
-            "standard lots, where 1 standard lot equals 100,000 base-currency units. In summary, reasoning, and risk_warning, " +
-            "describe size as 建玉数量 in base-currency units (通貨), not as lot or 手数. Use current_position_entry_price only when provided; never invent missing facts or prices. Respect the mode-specific margin limit. " +
+            "standard lots, where 1 standard lot equals 100,000 base-currency units. " +
+            "Use current_position_entry_price only when provided; never invent missing facts or prices. Respect the mode-specific margin limit. " +
             "Explicitly mention uncertainty and that the result is informational, not personalized investment advice. " +
-            "Keep summary within 30 Chinese characters, reasoning within 90, and risk_warning within 60.";
+            "Keep summary, reasoning, and risk_warning concise.";
 
-        public static string GetInstructions(AiTradeAdviceMode mode)
+        public static string GetInstructions(
+            AiTradeAdviceMode mode,
+            string responseLanguage = "Simplified Chinese")
         {
+            string commonInstructions = CommonInstructionsPrefix + GetLanguageInstructions(responseLanguage);
             if (mode == AiTradeAdviceMode.ForcedDirectional)
             {
-                return CommonInstructions +
+                return commonInstructions +
                     " This is a relatively aggressive forced-direction scenario. You must choose BUY or SELL and never HOLD. " +
                     "When evidence is weak or conflicting, choose the more defensible direction, lower confidence, and use a smaller feasible order. " +
                     "Do not use forced direction as a reason to ignore uncertainty, the SBI minimum order, or the 70% margin limit.";
             }
 
-            return CommonInstructions +
+            return commonInstructions +
                 " This is the conservative scenario. Choose BUY, SELL, or HOLD; HOLD must use suggested_lots=0. " +
                 "Prefer HOLD when data is stale, insufficient, conflicting, or when the current position is already aggressive. " +
                 "Keep estimated post-trade required margin at or below 50% of principal unless the order only reduces exposure.";
@@ -89,7 +92,8 @@ namespace TestFXTrade.Fx.OpenAI
             string interval,
             SbiFxRuleSnapshot rules,
             AiTradeAdviceMode mode,
-            double currentPositionEntryPrice)
+            double currentPositionEntryPrice,
+            string responseLanguage = "Simplified Chinese")
         {
             if (double.IsNaN(principalJpy) || double.IsInfinity(principalJpy) || principalJpy <= 0d)
             {
@@ -135,6 +139,7 @@ namespace TestFXTrade.Fx.OpenAI
             StringBuilder prompt = new StringBuilder(4096);
             prompt.AppendLine("Generate one USD/JPY order recommendation from this exact snapshot.");
             prompt.AppendLine(FormattableString.Invariant($"decision_mode={modeLabel}"));
+            prompt.AppendLine(FormattableString.Invariant($"response_language={NormalizeResponseLanguage(responseLanguage)}"));
             prompt.AppendLine();
             prompt.AppendLine("USER INPUTS");
             prompt.AppendLine(FormattableString.Invariant($"principal_jpy={principalJpy:0.##}"));
@@ -173,6 +178,34 @@ namespace TestFXTrade.Fx.OpenAI
             }
 
             return prompt.ToString();
+        }
+
+        private static string GetLanguageInstructions(string responseLanguage)
+        {
+            switch (NormalizeResponseLanguage(responseLanguage))
+            {
+                case "English":
+                    return " Answer all natural-language fields in English. In summary, reasoning, and risk_warning, " +
+                        "describe size as position size in base-currency units, not as lot or lots.";
+                case "Japanese":
+                    return " Answer all natural-language fields in Japanese. In summary, reasoning, and risk_warning, " +
+                        "describe size as 建玉数量 in base-currency units (通貨), not as lot, lots, or ロット.";
+                default:
+                    return " Answer all natural-language fields in Simplified Chinese. In summary, reasoning, and risk_warning, " +
+                        "describe size as 建玉数量 in base-currency units (通貨), not as lot or 手数.";
+            }
+        }
+
+        private static string NormalizeResponseLanguage(string responseLanguage)
+        {
+            switch (responseLanguage)
+            {
+                case "English":
+                case "Japanese":
+                    return responseLanguage;
+                default:
+                    return "Simplified Chinese";
+            }
         }
 
         private static string BuildCurrentPositionEntryPromptLine(double netPositionLots, double currentPositionEntryPrice)

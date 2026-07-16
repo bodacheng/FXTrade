@@ -3,16 +3,17 @@ const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_OPENAI_MODEL = "gpt-5.6";
 const ALLOWED_SYMBOL = "USD/JPY";
 const ALLOWED_INTERVALS = new Set(["1min", "5min", "15min"]);
+const ALLOWED_RESPONSE_LANGUAGES = new Set(["Simplified Chinese", "English", "Japanese"]);
 const MAX_PROMPT_LENGTH = 24000;
 
-const COMMON_INSTRUCTIONS =
+const COMMON_INSTRUCTIONS_PREFIX =
   "You are a USD/JPY decision-support assistant. Return only the requested JSON schema. " +
-  "Answer all natural-language fields in Simplified Chinese. Treat the SBI FX rule snapshot as a hard margin constraint, " +
+  "Treat the SBI FX rule snapshot as a hard margin constraint, " +
   "not as a guarantee that a trade is safe. The JSON field suggested_lots remains the internal next-order size in " +
-  "standard lots, where 1 standard lot equals 100,000 base-currency units. In summary, reasoning, and risk_warning, " +
-  "describe size as 建玉数量 in base-currency units (通貨), not as lot or 手数. Use current_position_entry_price only when provided; never invent missing facts or prices. Respect the mode-specific margin limit. " +
+  "standard lots, where 1 standard lot equals 100,000 base-currency units. " +
+  "Use current_position_entry_price only when provided; never invent missing facts or prices. Respect the mode-specific margin limit. " +
   "Explicitly mention uncertainty and that the result is informational, not personalized investment advice. " +
-  "Keep summary within 30 Chinese characters, reasoning within 90, and risk_warning within 60.";
+  "Keep summary, reasoning, and risk_warning concise.";
 
 class RelayError extends Error {
   constructor(status, publicMessage, logMessage = publicMessage) {
@@ -114,6 +115,12 @@ async function adviceHandler(request) {
   const prompt = typeof payload.prompt === "string" ? payload.prompt.trim() : "";
   const mode = payload.mode === "forced_directional" ? "forced_directional" :
     payload.mode === "conservative" ? "conservative" : "";
+  const requestedLanguage = typeof payload.language === "string"
+    ? payload.language
+    : "Simplified Chinese";
+  const language = ALLOWED_RESPONSE_LANGUAGES.has(requestedLanguage)
+    ? requestedLanguage
+    : "";
 
   if (prompt.length === 0 || prompt.length > MAX_PROMPT_LENGTH) {
     throw new RelayError(400, `AI提示词长度必须在1到${MAX_PROMPT_LENGTH}字符之间。`);
@@ -123,7 +130,16 @@ async function adviceHandler(request) {
     throw new RelayError(400, "AI策略模式无效。");
   }
 
-  const openAiRequest = buildOpenAiRequest(prompt, mode, process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL);
+  if (!language) {
+    throw new RelayError(400, "AI响应语言无效。");
+  }
+
+  const openAiRequest = buildOpenAiRequest(
+    prompt,
+    mode,
+    process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL,
+    language,
+  );
   const upstream = await fetchJson(
     OPENAI_RESPONSES_URL,
     {
@@ -142,10 +158,15 @@ async function adviceHandler(request) {
   return json(200, advice);
 }
 
-function buildOpenAiRequest(prompt, mode, model = DEFAULT_OPENAI_MODEL) {
+function buildOpenAiRequest(
+  prompt,
+  mode,
+  model = DEFAULT_OPENAI_MODEL,
+  language = "Simplified Chinese",
+) {
   return {
     model,
-    instructions: getInstructions(mode),
+    instructions: getInstructions(mode, language),
     input: prompt,
     store: false,
     max_output_tokens: 700,
@@ -160,18 +181,33 @@ function buildOpenAiRequest(prompt, mode, model = DEFAULT_OPENAI_MODEL) {
   };
 }
 
-function getInstructions(mode) {
+function getInstructions(mode, language = "Simplified Chinese") {
+  const commonInstructions = COMMON_INSTRUCTIONS_PREFIX + getLanguageInstructions(language);
   if (mode === "forced_directional") {
-    return COMMON_INSTRUCTIONS +
+    return commonInstructions +
       " This is a relatively aggressive forced-direction scenario. You must choose BUY or SELL and never HOLD. " +
       "When evidence is weak or conflicting, choose the more defensible direction, lower confidence, and use a smaller feasible order. " +
       "Do not use forced direction as a reason to ignore uncertainty, the SBI minimum order, or the 70% margin limit.";
   }
 
-  return COMMON_INSTRUCTIONS +
+  return commonInstructions +
     " This is the conservative scenario. Choose BUY, SELL, or HOLD; HOLD must use suggested_lots=0. " +
     "Prefer HOLD when data is stale, insufficient, conflicting, or when the current position is already aggressive. " +
     "Keep estimated post-trade required margin at or below 50% of principal unless the order only reduces exposure.";
+}
+
+function getLanguageInstructions(language) {
+  switch (language) {
+    case "English":
+      return " Answer all natural-language fields in English. In summary, reasoning, and risk_warning, " +
+        "describe size as position size in base-currency units, not as lot or lots.";
+    case "Japanese":
+      return " Answer all natural-language fields in Japanese. In summary, reasoning, and risk_warning, " +
+        "describe size as 建玉数量 in base-currency units (通貨), not as lot, lots, or ロット.";
+    default:
+      return " Answer all natural-language fields in Simplified Chinese. In summary, reasoning, and risk_warning, " +
+        "describe size as 建玉数量 in base-currency units (通貨), not as lot or 手数.";
+  }
 }
 
 function buildAdviceSchema(mode) {

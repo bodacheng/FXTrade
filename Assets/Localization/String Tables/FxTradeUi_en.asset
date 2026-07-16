@@ -1,0 +1,459 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9620f8c34305754d8cc9a7e49e852d9, type: 3}
+  m_Name: FxTradeUi_en
+  m_EditorClassIdentifier: Unity.Localization::UnityEngine.Localization.Tables.StringTable
+  m_LocaleId:
+    m_Code: en
+  m_SharedData: {fileID: 11400000, guid: 0fcac1958b7ed4979a20ad47288edd42, type: 2}
+  m_Metadata:
+    m_Items: []
+  m_TableData:
+  - m_Id: 1534058496
+    m_Localized: USD/JPY Trade Advisor
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145280
+    m_Localized: Reading Azure relay configuration...
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145281
+    m_Localized: Pair
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145282
+    m_Localized: Interval
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145283
+    m_Localized: Live 5s
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145284
+    m_Localized: Language
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145285
+    m_Localized: Market
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145286
+    m_Localized: Refresh
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145287
+    m_Localized: Smart Advice
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145288
+    m_Localized: Capital JPY
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145289
+    m_Localized: Net position
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145290
+    m_Localized: USD/JPY entry
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145291
+    m_Localized: SBI rules
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145292
+    m_Localized: Sync
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145293
+    m_Localized: Conservative
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145294
+    m_Localized: Get
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145295
+    m_Localized: Aggressive
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145296
+    m_Localized: Buy/Sell
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145297
+    m_Localized: 'SBI rules: not synced.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145298
+    m_Localized: Waiting for live USD/JPY data
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145299
+    m_Localized: Market indicators will appear here.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145300
+    m_Localized: Enter capital and net position, then sync SBI rules to request AI
+      advice.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145301
+    m_Localized: Option
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145302
+    m_Localized: Azure relay connected. Refreshing live USD/JPY data.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145303
+    m_Localized: Provider keys remain on the backend. AI advice is informational
+      and not investment advice.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145304
+    m_Localized: Azure relay URL is not configured.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145305
+    m_Localized: Deploy azure-relay and set the Function App URL in AzureRelayConfig.json.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145306
+    m_Localized: Live market data is already refreshing.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145307
+    m_Localized: Loading the USD/JPY quote and candles
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145308
+    m_Localized: Check AzureRelayConfig.json.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145309
+    m_Localized: Loading the live {0} quote and candles...
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145310
+    m_Localized: '{0} data updated: {1:HH:mm:ss}'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145311
+    m_Localized: Refresh cancelled.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145312
+    m_Localized: Live market data is temporarily unavailable.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145313
+    m_Localized: 'Error: {0}'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145314
+    m_Localized: The live quote is already refreshing.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145315
+    m_Localized: Updating the live USD/JPY quote
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145316
+    m_Localized: Updating the live {0} quote...
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339584
+    m_Localized: 'Live quote updated: {0:HH:mm:ss}'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339585
+    m_Localized: Source timestamp unavailable
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339586
+    m_Localized: '{0} {1:0.000}
+
+      {2} | {3} | {4} candles'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339587
+    m_Localized: Minimum {0:N0} currency units
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339588
+    m_Localized: 'Input unit: currency units'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339589
+    m_Localized: 'Trend {0:0.00}   RSI {1:0.0}   ATR {2:0.0} pips
+
+      {3}   {4}'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339590
+    m_Localized: Syncing the latest SBI FX rules
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339591
+    m_Localized: Reading the latest FX rules from the official SBI Securities page...
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339592
+    m_Localized: 'SBI FX rules saved locally: {0:HH:mm:ss}'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339593
+    m_Localized: Using the official 25x leverage margin table. AI advice is informational
+      and not investment advice.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339594
+    m_Localized: SBI rule sync cancelled.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339595
+    m_Localized: SBI FX rule sync failed.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339596
+    m_Localized: AI advice cannot be requested.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339597
+    m_Localized: Configure and deploy the Azure relay first.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339598
+    m_Localized: Sync the SBI FX rules first.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339599
+    m_Localized: Select 'SBI rules / Sync' and save the official rules before requesting
+      AI advice.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339600
+    m_Localized: Updating market data and preparing AI analysis
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339601
+    m_Localized: Updating market data and preparing AI analysis...
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339602
+    m_Localized: Live market data is missing, so AI advice cannot be generated yet.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339603
+    m_Localized: OpenAI is analyzing live data, indicators, and SBI margin rules
+      using the aggressive strategy...
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339604
+    m_Localized: OpenAI is analyzing live data, indicators, and SBI margin rules
+      using the conservative strategy...
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339605
+    m_Localized: Requesting OpenAI through Azure (aggressive strategy)...
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339606
+    m_Localized: Requesting OpenAI through Azure (conservative strategy)...
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339607
+    m_Localized: Waiting for OpenAI's aggressive recommendation
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339608
+    m_Localized: Waiting for OpenAI's conservative recommendation
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339609
+    m_Localized: 'Aggressive strategy updated: {0:HH:mm:ss}'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339610
+    m_Localized: 'Conservative strategy updated: {0:HH:mm:ss}'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339611
+    m_Localized: AI advice request cancelled.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339612
+    m_Localized: AI advice request failed.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339613
+    m_Localized: No new AI advice was received. Keep your existing position judgment
+      and check the configuration.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339614
+    m_Localized: Processing request
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339615
+    m_Localized: Invalid input.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339616
+    m_Localized: Capital must be a JPY amount greater than 0.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339617
+    m_Localized: 'Net position must be numeric: positive is long, negative is short,
+      and 0 is flat. Unit: currency units.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339618
+    m_Localized: The USD/JPY entry price must be greater than 0.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339619
+    m_Localized: 'Enter the USD/JPY entry price when net position is not 0: positive
+      is bought and negative is sold.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339620
+    m_Localized: Original direction exceeded the margin limit; changed to a small
+      opposite trade
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339621
+    m_Localized: The model's original direction was not executable under the local
+      margin cap, so the smallest executable opposite order was selected.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339622
+    m_Localized: The direction or position size was adjusted by the local margin
+      guard.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339623
+    m_Localized: '{0} The local margin guard adjusted the direction or position size.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339624
+    m_Localized: Buy
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339625
+    m_Localized: Sell
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339626
+    m_Localized: Hold
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339627
+    m_Localized: Aggressive advice
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339628
+    m_Localized: Conservative advice
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339629
+    m_Localized: '{0}: {1}   Position size {2}   Confidence {3:P0}
+
+      {4}
+
+      Rationale:
+      {5}'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339630
+    m_Localized: ' Local position-size guard applied.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339631
+    m_Localized: ' Aggressive mode forces a direction and does not mean the signal
+      is sufficient.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339632
+    m_Localized: '{0} Estimated post-trade net position: {1}; margin usage: {2:0.0}%
+      of capital.{3}{4} AI advice is informational and not investment advice.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339633
+    m_Localized: 'SBI rules: not synced. Load the latest official rules first.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339634
+    m_Localized: 'SBI rules: {0}x / {1:0.##}% / {2:N0} JPY per 10,000 currency units
+      / effective {3} / minimum {4:N0} currency units'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339635
+    m_Localized: environment variable
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339636
+    m_Localized: app configuration
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339637
+    m_Localized: 'Market data and AI: Azure relay not configured'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339638
+    m_Localized: 'Market data and AI: Azure backend relay ({0})'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339639
+    m_Localized: '{0} currency units'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339640
+    m_Localized: 'Current net position: 0 currency units (flat)'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339641
+    m_Localized: positive=long
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339642
+    m_Localized: negative=short
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339643
+    m_Localized: ', entry USD/JPY {0}'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339644
+    m_Localized: ', entry price not entered'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339645
+    m_Localized: 'Current net position: {0} currency units ({1}{2})'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339646
+    m_Localized: position size {0}
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339647
+    m_Localized: position size
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339648
+    m_Localized: AI advice is informational and not investment advice.
+    m_Metadata:
+      m_Items: []
+  references:
+    version: 2
+    RefIds: []

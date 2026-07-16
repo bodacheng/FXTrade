@@ -18,7 +18,7 @@ namespace TestFXTrade.Fx.MarketData
             this.relayBaseUrl = AzureRelaySettings.NormalizeBaseUrl(relayBaseUrl);
         }
 
-        public string ProviderName => "Twelve Data（Azure中转）";
+        public string ProviderName => "Twelve Data";
 
         public async Task<MarketQuote> GetLatestQuoteAsync(string symbol, CancellationToken cancellationToken)
         {

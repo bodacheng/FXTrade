@@ -3,6 +3,8 @@
     "rootNamespace": "",
     "references": [
         "Unity.InputSystem",
+        "Unity.Localization",
+        "Unity.ResourceManager",
         "Unity.TextMeshPro"
     ],
     "includePlatforms": [],

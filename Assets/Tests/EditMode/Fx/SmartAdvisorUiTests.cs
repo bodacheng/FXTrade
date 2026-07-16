@@ -7,6 +7,9 @@ using TestFXTrade.Fx.UI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.Localization;
+using UnityEngine.Localization.Components;
+using UnityEngine.Localization.Settings;
 using UnityEngine.UI;
 
 namespace TestFXTrade.Tests.EditMode.Fx
@@ -39,6 +42,8 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 Assert.IsTrue(activeFont.HasCharacters("中文建玉数量通貨买卖同步", out System.Collections.Generic.List<char> loadedMissingCharacters), string.Join(string.Empty, loadedMissingCharacters));
                 Assert.IsTrue(activeFont.TryAddCharacters("震荡风险支撑阻力美元日元", out string missingCharacters, true), missingCharacters);
                 Assert.IsEmpty(missingCharacters);
+                Assert.IsTrue(activeFont.TryAddCharacters("日本語取引アドバイザー保証金更新", out missingCharacters, true), missingCharacters);
+                Assert.IsEmpty(missingCharacters);
 
                 TMP_InputField[] accountInputs = canvasObject.GetComponentsInChildren<TMP_InputField>(true);
                 Assert.AreEqual(3, accountInputs.Length);
@@ -56,7 +61,8 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 Assert.AreEqual(0, canvasObject.GetComponentsInChildren<InputField>(true).Length);
                 Assert.AreEqual(0, canvasObject.GetComponentsInChildren<Dropdown>(true).Length);
                 Assert.Greater(canvasObject.GetComponentsInChildren<TextMeshProUGUI>(true).Length, 0);
-                Assert.AreEqual(1, canvasObject.GetComponentsInChildren<TMP_Dropdown>(true).Length);
+                Assert.AreEqual(2, canvasObject.GetComponentsInChildren<TMP_Dropdown>(true).Length);
+                Assert.Greater(canvasObject.GetComponentsInChildren<LocalizeStringEvent>(true).Length, 0);
                 TMP_Text[] visibleTexts = canvasObject.GetComponentsInChildren<TMP_Text>(true);
                 bool hasPositionQuantityLabel = false;
                 for (int i = 0; i < visibleTexts.Length; i++)
@@ -127,8 +133,8 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 Assert.NotNull(beginLoading);
                 Assert.NotNull(endLoading);
 
-                beginLoading.Invoke(app, new object[] { "正在测试加载状态" });
-                beginLoading.Invoke(app, new object[] { "正在测试嵌套任务" });
+                beginLoading.Invoke(app, new object[] { "status_processing", "正在测试加载状态", Array.Empty<object>() });
+                beginLoading.Invoke(app, new object[] { "status_processing", "正在测试嵌套任务", Array.Empty<object>() });
                 Assert.IsTrue(loadingIndicator.gameObject.activeSelf);
                 for (int i = 0; i < buttons.Length; i++)
                 {
@@ -173,6 +179,41 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 {
                     UnityEngine.Object.DestroyImmediate(currentEventSystem.gameObject);
                 }
+            }
+        }
+
+        [Test]
+        public void OfficialLocalizationTablesProvideChineseEnglishAndJapanese()
+        {
+            LocalizationSettings.InitializationOperation.WaitForCompletion();
+            Locale originalLocale = LocalizationSettings.SelectedLocale;
+            Locale chinese = LocalizationSettings.AvailableLocales.GetLocale(new LocaleIdentifier("zh-Hans"));
+            Locale english = LocalizationSettings.AvailableLocales.GetLocale(new LocaleIdentifier("en"));
+            Locale japanese = LocalizationSettings.AvailableLocales.GetLocale(new LocaleIdentifier("ja"));
+
+            Assert.NotNull(chinese);
+            Assert.NotNull(english);
+            Assert.NotNull(japanese);
+            Assert.AreEqual(
+                "USD/JPY 交易助手",
+                LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "app_title", chinese));
+            Assert.AreEqual(
+                "USD/JPY Trade Advisor",
+                LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "app_title", english));
+            Assert.AreEqual(
+                "USD/JPY 取引アドバイザー",
+                LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "app_title", japanese));
+
+            try
+            {
+                Assert.IsTrue(FxTradeLocalization.TrySelectLocale("en", false));
+                Assert.AreEqual("en", FxTradeLocalization.GetSelectedLocaleCode());
+                Assert.IsTrue(FxTradeLocalization.TrySelectLocale("ja", false));
+                Assert.AreEqual("ja", FxTradeLocalization.GetSelectedLocaleCode());
+            }
+            finally
+            {
+                LocalizationSettings.SelectedLocale = originalLocale ?? chinese;
             }
         }
     }

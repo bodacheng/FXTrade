@@ -3,6 +3,8 @@
     "rootNamespace": "",
     "references": [
         "TestFXTrade.Fx",
+        "Unity.Localization",
+        "Unity.ResourceManager",
         "Unity.TextMeshPro"
     ],
     "includePlatforms": [

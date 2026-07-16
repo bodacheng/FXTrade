@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 996e5dcc0107b4b75b32d3a208185b69
+guid: 941125f0298204ea9b1cdda141fe1e8a
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -7189983539013466068
-    second: "\u30B9\u30AF\u30EA\u30FC\u30F3\u30B7\u30E7\u30C3\u30C8 2026-07-15 19.04.13_0"
+      213: -3417293263286530437
+    second: "ChatGPT Image 2026\u5E747\u670816\u65E5 11_01_41_0"
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -97,19 +97,6 @@ TextureImporter:
     androidETC2FallbackOverride: 0
     forceMaximumCompressionQuality_BC6H_BC7: 0
   - serializedVersion: 4
-    buildTarget: Android
-    maxTextureSize: 2048
-    resizeAlgorithm: 0
-    textureFormat: -1
-    textureCompression: 1
-    compressionQuality: 50
-    crunchedCompression: 0
-    allowsAlphaSplitting: 0
-    overridden: 0
-    ignorePlatformSupport: 0
-    androidETC2FallbackOverride: 0
-    forceMaximumCompressionQuality_BC6H_BC7: 0
-  - serializedVersion: 4
     buildTarget: iOS
     maxTextureSize: 2048
     resizeAlgorithm: 0
@@ -126,13 +113,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: "\u30B9\u30AF\u30EA\u30FC\u30F3\u30B7\u30E7\u30C3\u30C8 2026-07-15 19.04.13_0"
+      name: "ChatGPT Image 2026\u5E747\u670816\u65E5 11_01_41_0"
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 342
-        height: 340
+        width: 1254
+        height: 1254
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -141,8 +128,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: c284230c01c083c90800000000000000
-      internalID: -7189983539013466068
+      spriteID: b7e8874f1e55390d0800000000000000
+      internalID: -3417293263286530437
       vertices: []
       indices: 
       edges: []
@@ -161,7 +148,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      "\u30B9\u30AF\u30EA\u30FC\u30F3\u30B7\u30E7\u30C3\u30C8 2026-07-15 19.04.13_0": -7189983539013466068
+      "ChatGPT Image 2026\u5E747\u670816\u65E5 11_01_41_0": -3417293263286530437
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

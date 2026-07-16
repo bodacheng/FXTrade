@@ -27,6 +27,15 @@ namespace TestFXTrade.Fx.OpenAI
             AiTradeAdviceMode mode,
             CancellationToken cancellationToken)
         {
+            return await GetAdviceAsync(prompt, mode, "Simplified Chinese", cancellationToken);
+        }
+
+        public async Task<OpenAiTradeAdvice> GetAdviceAsync(
+            string prompt,
+            AiTradeAdviceMode mode,
+            string responseLanguage,
+            CancellationToken cancellationToken)
+        {
             if (string.IsNullOrWhiteSpace(relayBaseUrl))
             {
                 throw new InvalidOperationException("尚未配置 Azure 中转地址。");
@@ -37,7 +46,7 @@ namespace TestFXTrade.Fx.OpenAI
                 throw new ArgumentException("发送给AI的提示词为空。", nameof(prompt));
             }
 
-            AzureRelayAdviceRequest payload = BuildRequest(prompt, mode);
+            AzureRelayAdviceRequest payload = BuildRequest(prompt, mode, responseLanguage);
             string requestJson = JsonUtility.ToJson(payload);
             string endpoint = $"{relayBaseUrl}/api/advice";
 
@@ -82,11 +91,32 @@ namespace TestFXTrade.Fx.OpenAI
 
         private static AzureRelayAdviceRequest BuildRequest(string prompt, AiTradeAdviceMode mode)
         {
+            return BuildRequest(prompt, mode, "Simplified Chinese");
+        }
+
+        private static AzureRelayAdviceRequest BuildRequest(
+            string prompt,
+            AiTradeAdviceMode mode,
+            string responseLanguage)
+        {
             return new AzureRelayAdviceRequest
             {
                 prompt = prompt,
-                mode = mode == AiTradeAdviceMode.ForcedDirectional ? "forced_directional" : "conservative"
+                mode = mode == AiTradeAdviceMode.ForcedDirectional ? "forced_directional" : "conservative",
+                language = NormalizeResponseLanguage(responseLanguage)
             };
+        }
+
+        private static string NormalizeResponseLanguage(string responseLanguage)
+        {
+            switch (responseLanguage)
+            {
+                case "English":
+                case "Japanese":
+                    return responseLanguage;
+                default:
+                    return "Simplified Chinese";
+            }
         }
 
         private static void ValidateAdvice(OpenAiTradeAdvice advice, AiTradeAdviceMode mode)
@@ -145,6 +175,7 @@ namespace TestFXTrade.Fx.OpenAI
         {
             public string prompt;
             public string mode;
+            public string language;
         }
 
         [Serializable]

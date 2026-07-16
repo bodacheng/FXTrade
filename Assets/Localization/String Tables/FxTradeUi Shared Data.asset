@@ -1,0 +1,440 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b11a58205ec3474ca216360e9fa74a8, type: 3}
+  m_Name: FxTradeUi Shared Data
+  m_EditorClassIdentifier: Unity.Localization::UnityEngine.Localization.Tables.SharedTableData
+  m_TableCollectionName: FxTradeUi
+  m_TableCollectionNameGuidString: 0fcac1958b7ed4979a20ad47288edd42
+  m_Entries:
+  - m_Id: 1534058496
+    m_Key: app_title
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145280
+    m_Key: source_loading
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145281
+    m_Key: label_market_pair
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145282
+    m_Key: label_interval
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145283
+    m_Key: label_auto_refresh
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145284
+    m_Key: label_language
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145285
+    m_Key: label_manual_market
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145286
+    m_Key: button_refresh
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145287
+    m_Key: section_smart_advice
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145288
+    m_Key: label_principal
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145289
+    m_Key: label_net_position
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145290
+    m_Key: label_entry_price
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145291
+    m_Key: label_sbi_rules
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145292
+    m_Key: button_sync
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145293
+    m_Key: label_conservative_advice
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145294
+    m_Key: button_get
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145295
+    m_Key: label_aggressive_advice
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145296
+    m_Key: button_buy_sell_required
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145297
+    m_Key: sbi_not_synced_short
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145298
+    m_Key: quote_waiting
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145299
+    m_Key: metrics_waiting
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145300
+    m_Key: advice_initial
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145301
+    m_Key: dropdown_option
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145302
+    m_Key: status_connected
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145303
+    m_Key: warning_secret
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145304
+    m_Key: status_relay_missing
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145305
+    m_Key: warning_deploy_relay
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145306
+    m_Key: status_market_refresh_busy
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145307
+    m_Key: loading_quote_candles
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145308
+    m_Key: warning_check_config
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145309
+    m_Key: status_fetch_quote_candles
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145310
+    m_Key: status_provider_updated
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145311
+    m_Key: status_refresh_cancelled
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145312
+    m_Key: status_market_unavailable
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145313
+    m_Key: warning_error_detail
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145314
+    m_Key: status_quote_refresh_busy
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145315
+    m_Key: loading_quote
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3090145316
+    m_Key: status_update_quote
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339584
+    m_Key: status_quote_updated
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339585
+    m_Key: quote_timestamp_missing
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339586
+    m_Key: quote_summary
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339587
+    m_Key: minimum_units
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339588
+    m_Key: input_unit
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339589
+    m_Key: metrics_summary
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339590
+    m_Key: loading_sbi
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339591
+    m_Key: status_reading_sbi
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339592
+    m_Key: status_sbi_saved
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339593
+    m_Key: warning_sbi_official
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339594
+    m_Key: status_sbi_cancelled
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339595
+    m_Key: status_sbi_failed
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339596
+    m_Key: status_ai_unavailable
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339597
+    m_Key: warning_configure_relay
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339598
+    m_Key: status_sync_sbi_first
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339599
+    m_Key: warning_sync_sbi
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339600
+    m_Key: loading_prepare_ai
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339601
+    m_Key: status_prepare_ai
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339602
+    m_Key: error_missing_market
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339603
+    m_Key: advice_analyzing_aggressive
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339604
+    m_Key: advice_analyzing_conservative
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339605
+    m_Key: status_requesting_openai_aggressive
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339606
+    m_Key: status_requesting_openai_conservative
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339607
+    m_Key: status_wait_openai_aggressive
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339608
+    m_Key: status_wait_openai_conservative
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339609
+    m_Key: status_aggressive_updated
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339610
+    m_Key: status_conservative_updated
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339611
+    m_Key: status_ai_cancelled
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339612
+    m_Key: status_ai_failed
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339613
+    m_Key: advice_failed
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339614
+    m_Key: status_processing
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339615
+    m_Key: status_invalid_input
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339616
+    m_Key: warning_principal
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339617
+    m_Key: warning_position
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339618
+    m_Key: warning_entry_price
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339619
+    m_Key: warning_missing_entry
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339620
+    m_Key: guard_summary_reverse
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339621
+    m_Key: guard_reason_reverse
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339622
+    m_Key: guard_adjusted_empty
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339623
+    m_Key: guard_adjusted_append
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339624
+    m_Key: action_buy
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339625
+    m_Key: action_sell
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339626
+    m_Key: action_hold
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339627
+    m_Key: mode_aggressive_advice
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339628
+    m_Key: mode_conservative_advice
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339629
+    m_Key: advice_result
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339630
+    m_Key: guard_applied
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339631
+    m_Key: forced_direction_warning
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339632
+    m_Key: warning_ai_result
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339633
+    m_Key: sbi_not_synced
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339634
+    m_Key: sbi_summary
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339635
+    m_Key: source_environment
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339636
+    m_Key: source_app_config
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339637
+    m_Key: relay_not_configured
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339638
+    m_Key: relay_configured
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339639
+    m_Key: formatted_quantity
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339640
+    m_Key: position_flat
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339641
+    m_Key: position_side_long
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339642
+    m_Key: position_side_short
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339643
+    m_Key: position_entry_present
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339644
+    m_Key: position_entry_missing
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339645
+    m_Key: position_summary
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339646
+    m_Key: normalized_position_size
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339647
+    m_Key: position_size
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3094339648
+    m_Key: warning_default
+    m_Metadata:
+      m_Items: []
+  m_Metadata:
+    m_Items: []
+  m_KeyGenerator:
+    rid: 2670974692610015256
+  references:
+    version: 2
+    RefIds:
+    - rid: 2670974692610015256
+      type: {class: DistributedUIDGenerator, ns: UnityEngine.Localization.Tables, asm: Unity.Localization}
+      data:
+        m_CustomEpoch: 1784168007397

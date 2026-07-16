@@ -114,6 +114,12 @@ namespace TestFXTrade.Tests.EditMode.Fx
             string instructions = OpenAiTradePromptBuilder.GetInstructions(AiTradeAdviceMode.Conservative);
             Assert.That(instructions, Does.Contain("建玉数量"));
             Assert.That(instructions, Does.Contain("not as lot"));
+            Assert.That(
+                OpenAiTradePromptBuilder.GetInstructions(AiTradeAdviceMode.Conservative, "English"),
+                Does.Contain("natural-language fields in English"));
+            Assert.That(
+                OpenAiTradePromptBuilder.GetInstructions(AiTradeAdviceMode.Conservative, "Japanese"),
+                Does.Contain("natural-language fields in Japanese"));
         }
 
         [Test]
@@ -132,7 +138,7 @@ namespace TestFXTrade.Tests.EditMode.Fx
         }
 
         [Test]
-        public void AzureRelayRequestContainsOnlyPromptAndMode()
+        public void AzureRelayRequestContainsPromptModeAndLanguageWithoutSecrets()
         {
             MethodInfo buildRequest = typeof(AzureRelayTradeAdvisorClient).GetMethod(
                 "BuildRequest",
@@ -149,6 +155,7 @@ namespace TestFXTrade.Tests.EditMode.Fx
 
             Assert.That(json, Does.Contain("\"prompt\":\"test prompt\""));
             Assert.That(json, Does.Contain("\"mode\":\"conservative\""));
+            Assert.That(json, Does.Contain("\"language\":\"Simplified Chinese\""));
             Assert.That(json, Does.Not.Contain("OPENAI_API_KEY"));
             Assert.That(json, Does.Not.Contain("TWELVE_DATA_API_KEY"));
             Assert.That(json, Does.Not.Contain("Authorization"));

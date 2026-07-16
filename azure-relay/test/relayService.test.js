@@ -22,6 +22,16 @@ test("forced directional schema excludes HOLD", () => {
   assert.match(request.instructions, /not as lot/);
 });
 
+test("OpenAI instructions follow the requested UI language", () => {
+  const english = buildOpenAiRequest("prompt", "conservative", "test-model", "English");
+  const japanese = buildOpenAiRequest("prompt", "conservative", "test-model", "Japanese");
+
+  assert.match(english.instructions, /natural-language fields in English/);
+  assert.match(english.instructions, /position size/);
+  assert.match(japanese.instructions, /natural-language fields in Japanese/);
+  assert.match(japanese.instructions, /建玉数量/);
+});
+
 test("OpenAI structured output is normalized for the client", () => {
   const response = {
     output: [{

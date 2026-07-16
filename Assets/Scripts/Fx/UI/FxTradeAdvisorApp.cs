@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -54,6 +53,7 @@ namespace TestFXTrade.Fx.UI
         private TMP_InputField netPositionInput;
         private TMP_InputField positionEntryPriceInput;
         private TMP_Dropdown intervalDropdown;
+        private TMP_Dropdown languageDropdown;
         private Toggle autoRefreshToggle;
         private Button syncSbiRulesButton;
         private Button requestAiAdviceButton;
@@ -82,6 +82,12 @@ namespace TestFXTrade.Fx.UI
         private SbiFxRuleSnapshot sbiRules;
         private MarketQuote latestQuote;
         private string relayBaseUrl = string.Empty;
+        private string relaySourceLabel = string.Empty;
+        private OpenAiTradeAdvice lastAdvice;
+        private double lastAdvicePrincipalJpy;
+        private double lastAdviceCurrentNetLots;
+        private bool lastAdviceAdjusted;
+        private AiTradeAdviceMode lastAdviceMode;
         private float nextQuoteRefreshAt;
         private float nextCandleRefreshAt;
         private bool quoteRefreshInFlight;
@@ -105,6 +111,7 @@ namespace TestFXTrade.Fx.UI
         private void Awake()
         {
             ConfigurePortraitRuntime();
+            FxTradeLocalization.ApplySavedLocale();
             font = CreateChineseUiFont();
             BuildUi();
         }
@@ -113,24 +120,25 @@ namespace TestFXTrade.Fx.UI
         {
             AzureRelaySettings settings = AzureRelaySettings.Load();
             relayBaseUrl = settings.BaseUrl;
+            relaySourceLabel = settings.SourceLabel;
             sbiRules = sbiRuleService.LoadLocal();
             RenderSbiRuleState();
-            RenderRelayState(settings.SourceLabel);
+            RenderRelayState(relaySourceLabel);
 
             if (settings.IsConfigured)
             {
                 marketDataProvider = new AzureRelayMarketDataProvider(relayBaseUrl);
                 openAiClient = new AzureRelayTradeAdvisorClient(relayBaseUrl);
-                SetStatus("已连接 Azure 中转，正在刷新 USD/JPY 实时行情。");
+                SetStatus("status_connected", "已连接 Azure 中转，正在刷新 USD/JPY 实时行情。");
                 nextQuoteRefreshAt = Time.time + QuoteRefreshSeconds;
                 nextCandleRefreshAt = Time.time + CandleRefreshSeconds;
-                SetWarning("供应商密钥仅保存在后台。AI建议仅供参考，不构成投资建议。");
+                SetWarning("warning_secret", "供应商密钥仅保存在后台。AI建议仅供参考，不构成投资建议。");
                 _ = RefreshCandlesAndQuoteAsync(true);
                 return;
             }
 
-            SetStatus("尚未配置 Azure 中转地址。");
-            SetWarning("请部署 azure-relay，并在 AzureRelayConfig.json 中填写 Function App 地址。");
+            SetStatus("status_relay_missing", "尚未配置 Azure 中转地址。");
+            SetWarning("warning_deploy_relay", "请部署 azure-relay，并在 AzureRelayConfig.json 中填写 Function App 地址。");
             nextQuoteRefreshAt = float.PositiveInfinity;
             nextCandleRefreshAt = float.PositiveInfinity;
         }
@@ -194,6 +202,7 @@ namespace TestFXTrade.Fx.UI
             BuildInputColumn(content.transform);
             BuildOutputColumn(content.transform);
             BuildLoadingIndicator(content.transform);
+            BindStaticUiTexts(root.transform);
             RefreshAdaptiveLayout(true);
         }
 
@@ -201,6 +210,14 @@ namespace TestFXTrade.Fx.UI
         {
             AddHeader(parent, "USD/JPY 交易助手");
             marketSourceText = AddCompactInfoText(parent, "正在读取 Azure 中转配置……");
+
+            Transform languageControls = CreateCompactFieldRow(parent, "Language Controls");
+            languageDropdown = AddDropdown(
+                languageControls,
+                "语言",
+                new List<string>(FxTradeLocalization.NativeLocaleNames),
+                FxTradeLocalization.GetSelectedLocaleIndex());
+            languageDropdown.onValueChanged.AddListener(OnLanguageSelected);
 
             Transform controls = CreateCompactFieldRow(parent, "Market Controls");
             AddValueRow(controls, "交易对", FxConstants.UsdJpySymbol);
@@ -276,13 +293,129 @@ namespace TestFXTrade.Fx.UI
             warningsText.color = new Color32(244, 192, 102, 255);
         }
 
+        private void OnLanguageSelected(int index)
+        {
+            if (FxTradeLocalization.SelectLocaleAt(index))
+            {
+                RefreshLocalizedDynamicState();
+                return;
+            }
+
+            if (languageDropdown != null)
+            {
+                languageDropdown.SetValueWithoutNotify(FxTradeLocalization.GetSelectedLocaleIndex());
+            }
+        }
+
+        private void RefreshLocalizedDynamicState()
+        {
+            RenderSbiRuleState();
+            RenderRelayState(relaySourceLabel);
+
+            if (latestQuote != null)
+            {
+                RenderMarketMetrics(latestQuote, BuildRealtimeCandles(), GetSelectedInterval());
+            }
+
+            if (lastAdvice != null)
+            {
+                RenderAiAdvice(
+                    lastAdvice,
+                    lastAdvicePrincipalJpy,
+                    lastAdviceCurrentNetLots,
+                    lastAdviceAdjusted,
+                    lastAdviceMode);
+            }
+        }
+
+        private static void BindStaticUiTexts(Transform root)
+        {
+            TMP_Text[] texts = root.GetComponentsInChildren<TMP_Text>(true);
+            for (int i = 0; i < texts.Length; i++)
+            {
+                TMP_Text text = texts[i];
+                switch (text.text)
+                {
+                    case "USD/JPY 交易助手":
+                        FxTradeLocalization.Bind(text, "app_title", text.text);
+                        break;
+                    case "正在读取 Azure 中转配置……":
+                        FxTradeLocalization.Bind(text, "source_loading", text.text);
+                        break;
+                    case "交易对":
+                        FxTradeLocalization.Bind(text, "label_market_pair", text.text);
+                        break;
+                    case "周期":
+                        FxTradeLocalization.Bind(text, "label_interval", text.text);
+                        break;
+                    case "实时 5秒":
+                        FxTradeLocalization.Bind(text, "label_auto_refresh", text.text);
+                        break;
+                    case "语言":
+                        FxTradeLocalization.Bind(text, "label_language", text.text);
+                        break;
+                    case "手动行情":
+                        FxTradeLocalization.Bind(text, "label_manual_market", text.text);
+                        break;
+                    case "刷新":
+                        FxTradeLocalization.Bind(text, "button_refresh", text.text);
+                        break;
+                    case "智能建议":
+                        FxTradeLocalization.Bind(text, "section_smart_advice", text.text);
+                        break;
+                    case "本金 JPY":
+                        FxTradeLocalization.Bind(text, "label_principal", text.text);
+                        break;
+                    case "净建玉数量":
+                        FxTradeLocalization.Bind(text, "label_net_position", text.text);
+                        break;
+                    case "USD/JPY均价":
+                        FxTradeLocalization.Bind(text, "label_entry_price", text.text);
+                        break;
+                    case "SBI规则":
+                        FxTradeLocalization.Bind(text, "label_sbi_rules", text.text);
+                        break;
+                    case "同步":
+                        FxTradeLocalization.Bind(text, "button_sync", text.text);
+                        break;
+                    case "稳健建议":
+                        FxTradeLocalization.Bind(text, "label_conservative_advice", text.text);
+                        break;
+                    case "获取":
+                        FxTradeLocalization.Bind(text, "button_get", text.text);
+                        break;
+                    case "积极建议":
+                        FxTradeLocalization.Bind(text, "label_aggressive_advice", text.text);
+                        break;
+                    case "买/卖必选":
+                        FxTradeLocalization.Bind(text, "button_buy_sell_required", text.text);
+                        break;
+                    case "SBI规则：尚未同步。":
+                        FxTradeLocalization.Bind(text, "sbi_not_synced_short", text.text);
+                        break;
+                    case "正在等待 USD/JPY 实时行情":
+                        FxTradeLocalization.Bind(text, "quote_waiting", text.text);
+                        break;
+                    case "行情指标将在此显示。":
+                        FxTradeLocalization.Bind(text, "metrics_waiting", text.text);
+                        break;
+                    case "输入本金和净建玉数量，同步SBI规则后即可获取AI建议。":
+                        FxTradeLocalization.Bind(text, "advice_initial", text.text);
+                        break;
+                    case "选项":
+                        FxTradeLocalization.Bind(text, "dropdown_option", text.text);
+                        break;
+                }
+            }
+        }
+
         private async Task RefreshCandlesAndQuoteAsync(bool manual)
         {
             if (quoteRefreshInFlight || candleRefreshInFlight)
             {
                 if (manual)
                 {
-                    SetStatus("实时行情正在刷新中。");
+                    SetStatus("status_market_refresh_busy", "实时行情正在刷新中。");
                 }
 
                 return;
@@ -291,7 +424,7 @@ namespace TestFXTrade.Fx.UI
             CancellationToken token = GetMarketDataToken();
             candleRefreshInFlight = true;
             quoteRefreshInFlight = true;
-            BeginLoading("正在获取 USD/JPY 实时报价与K线");
+            BeginLoading("loading_quote_candles", "正在获取 USD/JPY 实时报价与K线");
             nextCandleRefreshAt = Time.time + CandleRefreshSeconds;
             nextQuoteRefreshAt = Time.time + QuoteRefreshSeconds;
 
@@ -299,13 +432,13 @@ namespace TestFXTrade.Fx.UI
             {
                 if (string.IsNullOrWhiteSpace(relayBaseUrl))
                 {
-                    SetStatus("尚未配置 Azure 中转地址。");
-                    SetWarning("请检查 AzureRelayConfig.json。");
+                    SetStatus("status_relay_missing", "尚未配置 Azure 中转地址。");
+                    SetWarning("warning_check_config", "请检查 AzureRelayConfig.json。");
                     return;
                 }
 
                 string symbol = FxConstants.UsdJpySymbol;
-                SetStatus($"正在获取 {symbol} 实时报价与K线……");
+                SetStatus("status_fetch_quote_candles", "正在获取 {0} 实时报价与K线……", symbol);
 
                 IFxMarketDataProvider provider = GetMarketDataProvider();
                 string interval = GetSelectedInterval();
@@ -321,16 +454,21 @@ namespace TestFXTrade.Fx.UI
 
                 latestQuote = quoteTask.Result;
                 ReplaceLatestCandles(candlesTask.Result);
-                RenderLatestMarketState(interval, $"{provider.ProviderName} 数据已更新：{DateTime.Now:HH:mm:ss}");
+                RenderLatestMarketState(
+                    interval,
+                    "status_provider_updated",
+                    "{0} 数据已更新：{1:HH:mm:ss}",
+                    provider.ProviderName,
+                    DateTime.Now);
             }
             catch (OperationCanceledException)
             {
-                SetStatus("已取消刷新。");
+                SetStatus("status_refresh_cancelled", "已取消刷新。");
             }
             catch (Exception ex)
             {
-                SetStatus("实时行情暂不可用。");
-                SetWarning(ex.Message);
+                SetStatus("status_market_unavailable", "实时行情暂不可用。");
+                SetWarning("warning_error_detail", "错误：{0}", ex.Message);
             }
             finally
             {
@@ -346,7 +484,7 @@ namespace TestFXTrade.Fx.UI
             {
                 if (manual)
                 {
-                    SetStatus("实时报价正在刷新中。");
+                    SetStatus("status_quote_refresh_busy", "实时报价正在刷新中。");
                 }
 
                 return;
@@ -354,20 +492,20 @@ namespace TestFXTrade.Fx.UI
 
             CancellationToken token = GetMarketDataToken();
             quoteRefreshInFlight = true;
-            BeginLoading("正在更新 USD/JPY 实时报价");
+            BeginLoading("loading_quote", "正在更新 USD/JPY 实时报价");
             nextQuoteRefreshAt = Time.time + QuoteRefreshSeconds;
 
             try
             {
                 if (string.IsNullOrWhiteSpace(relayBaseUrl))
                 {
-                    SetStatus("尚未配置 Azure 中转地址。");
-                    SetWarning("请检查 AzureRelayConfig.json。");
+                    SetStatus("status_relay_missing", "尚未配置 Azure 中转地址。");
+                    SetWarning("warning_check_config", "请检查 AzureRelayConfig.json。");
                     return;
                 }
 
                 string symbol = FxConstants.UsdJpySymbol;
-                SetStatus($"正在更新 {symbol} 实时报价……");
+                SetStatus("status_update_quote", "正在更新 {0} 实时报价……", symbol);
 
                 IFxMarketDataProvider provider = GetMarketDataProvider();
                 latestQuote = await provider.GetLatestQuoteAsync(symbol, token);
@@ -377,16 +515,20 @@ namespace TestFXTrade.Fx.UI
                     return;
                 }
 
-                RenderLatestMarketState(GetSelectedInterval(), $"实时报价已更新：{DateTime.Now:HH:mm:ss}");
+                RenderLatestMarketState(
+                    GetSelectedInterval(),
+                    "status_quote_updated",
+                    "实时报价已更新：{0:HH:mm:ss}",
+                    DateTime.Now);
             }
             catch (OperationCanceledException)
             {
-                SetStatus("已取消刷新。");
+                SetStatus("status_refresh_cancelled", "已取消刷新。");
             }
             catch (Exception ex)
             {
-                SetStatus("实时报价暂不可用。");
-                SetWarning(ex.Message);
+                SetStatus("status_market_unavailable", "实时报价暂不可用。");
+                SetWarning("warning_error_detail", "错误：{0}", ex.Message);
             }
             finally
             {
@@ -411,18 +553,22 @@ namespace TestFXTrade.Fx.UI
             }
         }
 
-        private void RenderLatestMarketState(string interval, string statusMessage)
+        private void RenderLatestMarketState(
+            string interval,
+            string statusKey,
+            string statusFallback,
+            params object[] statusArguments)
         {
             if (latestQuote == null)
             {
-                SetStatus(statusMessage);
+                SetStatus(statusKey, statusFallback, statusArguments);
                 return;
             }
 
             IReadOnlyList<Candle> realtimeCandles = BuildRealtimeCandles();
             chartGraphic.SetCandles(realtimeCandles);
             RenderMarketMetrics(latestQuote, realtimeCandles, interval);
-            SetStatus(statusMessage);
+            SetStatus(statusKey, statusFallback, statusArguments);
         }
 
         private IReadOnlyList<Candle> BuildRealtimeCandles()
@@ -462,19 +608,33 @@ namespace TestFXTrade.Fx.UI
         {
             string freshness = quote.IsTimestampReliable
                 ? $"{quote.TimeUtc:yyyy-MM-dd HH:mm:ss} UTC"
-                : "数据源时间戳不可用";
+                : FxTradeLocalization.Get("quote_timestamp_missing", "数据源时间戳不可用");
 
-            quoteText.text = $"{quote.Symbol} {quote.Price:0.000}\n{freshness} | {interval} | {candles.Count} 根K线";
+            FxTradeLocalization.Bind(
+                quoteText,
+                "quote_summary",
+                "{0} {1:0.000}\n{2} | {3} | {4} 根K线",
+                quote.Symbol,
+                quote.Price,
+                freshness,
+                interval,
+                candles.Count);
 
             double trendScore = TechnicalIndicatorService.CalculateTrendScore(candles, out double atrPips, out double rsi);
             double netPositionQuantity = ParseInput(netPositionInput, 0d);
             double positionEntryPrice = ParseInput(positionEntryPriceInput, 0d);
             string quantityRuleText = sbiRules != null && sbiRules.IsUsable
-                ? $"最小 {sbiRules.MinimumOrderUnits:N0} 通貨"
-                : "输入单位：通貨";
-            metricsText.text =
-                $"趋势 {trendScore:0.00}   RSI {rsi:0.0}   ATR {atrPips:0.0} pips\n" +
-                $"{FormatCurrentPositionSummary(netPositionQuantity, positionEntryPrice)}   {quantityRuleText}";
+                ? FxTradeLocalization.Get("minimum_units", "最小 {0:N0} 通貨", sbiRules.MinimumOrderUnits)
+                : FxTradeLocalization.Get("input_unit", "输入单位：通貨");
+            FxTradeLocalization.Bind(
+                metricsText,
+                "metrics_summary",
+                "趋势 {0:0.00}   RSI {1:0.0}   ATR {2:0.0} pips\n{3}   {4}",
+                trendScore,
+                rsi,
+                atrPips,
+                FormatCurrentPositionSummary(netPositionQuantity, positionEntryPrice),
+                quantityRuleText);
         }
 
         private async Task SyncSbiRulesAsync()
@@ -486,25 +646,25 @@ namespace TestFXTrade.Fx.UI
 
             sbiSyncInFlight = true;
             syncSbiRulesButton.interactable = false;
-            BeginLoading("正在同步 SBI FX 最新规则");
+            BeginLoading("loading_sbi", "正在同步 SBI FX 最新规则");
             CancellationToken token = GetAdvisoryToken();
 
             try
             {
-                SetStatus("正在从SBI证券官方页面读取最新FX规则……");
+                SetStatus("status_reading_sbi", "正在从SBI证券官方页面读取最新FX规则……");
                 sbiRules = await sbiRuleService.RefreshAsync(token);
                 RenderSbiRuleState();
-                SetStatus($"SBI FX规则已保存到本地：{DateTime.Now:HH:mm:ss}");
-                SetWarning("已采用官方25倍杠杆保证金表。AI建议仅供参考，不构成投资建议。");
+                SetStatus("status_sbi_saved", "SBI FX规则已保存到本地：{0:HH:mm:ss}", DateTime.Now);
+                SetWarning("warning_sbi_official", "已采用官方25倍杠杆保证金表。AI建议仅供参考，不构成投资建议。");
             }
             catch (OperationCanceledException)
             {
-                SetStatus("已取消SBI规则同步。");
+                SetStatus("status_sbi_cancelled", "已取消SBI规则同步。");
             }
             catch (Exception ex)
             {
-                SetStatus("SBI FX规则同步失败。");
-                SetWarning(ex.Message);
+                SetStatus("status_sbi_failed", "SBI FX规则同步失败。");
+                SetWarning("warning_error_detail", "错误：{0}", ex.Message);
             }
             finally
             {
@@ -531,26 +691,26 @@ namespace TestFXTrade.Fx.UI
 
             if (string.IsNullOrWhiteSpace(relayBaseUrl) || openAiClient == null)
             {
-                SetStatus("无法请求AI建议。");
-                SetWarning("请先配置并部署 Azure 中转服务。");
+                SetStatus("status_ai_unavailable", "无法请求AI建议。");
+                SetWarning("warning_configure_relay", "请先配置并部署 Azure 中转服务。");
                 return;
             }
 
             if (sbiRules == null || !sbiRules.IsUsable)
             {
-                SetStatus("请先同步SBI FX规则。");
-                SetWarning("点击“SBI规则 / 同步”，成功保存官方规则后再获取AI建议。");
+                SetStatus("status_sync_sbi_first", "请先同步SBI FX规则。");
+                SetWarning("warning_sync_sbi", "点击“SBI规则 / 同步”，成功保存官方规则后再获取AI建议。");
                 return;
             }
 
             aiAdviceInFlight = true;
             SetAdviceButtonsInteractable(false);
-            BeginLoading("正在更新行情并准备 AI 分析");
+            BeginLoading("loading_prepare_ai", "正在更新行情并准备 AI 分析");
             CancellationToken token = GetAdvisoryToken();
 
             try
             {
-                SetStatus("正在更新行情并准备AI分析……");
+                SetStatus("status_prepare_ai", "正在更新行情并准备AI分析……");
                 while (quoteRefreshInFlight || candleRefreshInFlight)
                 {
                     token.ThrowIfCancellationRequested();
@@ -562,7 +722,9 @@ namespace TestFXTrade.Fx.UI
 
                 if (latestQuote == null || latestCandles.Count == 0)
                 {
-                    throw new InvalidOperationException("缺少实时行情，暂时不能生成AI建议。");
+                    throw new InvalidOperationException(FxTradeLocalization.Get(
+                        "error_missing_market",
+                        "缺少实时行情，暂时不能生成AI建议。"));
                 }
 
                 IReadOnlyList<Candle> realtimeCandles = BuildRealtimeCandles();
@@ -574,26 +736,50 @@ namespace TestFXTrade.Fx.UI
                     GetSelectedInterval(),
                     sbiRules,
                     mode,
-                    positionEntryPrice);
+                    positionEntryPrice,
+                    FxTradeLocalization.GetAiResponseLanguageInstruction());
 
-                string modeLabel = mode == AiTradeAdviceMode.ForcedDirectional ? "积极策略" : "稳健策略";
-                recommendationText.text = $"OpenAI正在按{modeLabel}结合实时行情、技术指标和SBI保证金规则进行分析……";
-                SetStatus($"正在通过 Azure 请求 OpenAI（{modeLabel}）……");
-                SetLoadingTask($"正在等待 OpenAI 返回{modeLabel}建议");
-                OpenAiTradeAdvice advice = await openAiClient.GetAdviceAsync(prompt, mode, token);
+                bool aggressive = mode == AiTradeAdviceMode.ForcedDirectional;
+                FxTradeLocalization.Bind(
+                    recommendationText,
+                    aggressive ? "advice_analyzing_aggressive" : "advice_analyzing_conservative",
+                    aggressive
+                        ? "OpenAI正在按积极策略结合实时行情、技术指标和SBI保证金规则进行分析……"
+                        : "OpenAI正在按稳健策略结合实时行情、技术指标和SBI保证金规则进行分析……");
+                SetStatus(
+                    aggressive ? "status_requesting_openai_aggressive" : "status_requesting_openai_conservative",
+                    aggressive
+                        ? "正在通过 Azure 请求 OpenAI（积极策略）……"
+                        : "正在通过 Azure 请求 OpenAI（稳健策略）……");
+                SetLoadingTask(
+                    aggressive ? "status_wait_openai_aggressive" : "status_wait_openai_conservative",
+                    aggressive
+                        ? "正在等待 OpenAI 返回积极策略建议"
+                        : "正在等待 OpenAI 返回稳健策略建议");
+                OpenAiTradeAdvice advice = await openAiClient.GetAdviceAsync(
+                    prompt,
+                    mode,
+                    FxTradeLocalization.GetAiResponseLanguageInstruction(),
+                    token);
                 bool adjusted = ApplyLocalMarginGuard(advice, principalJpy, netPositionLots, sbiRules, mode);
                 RenderAiAdvice(advice, principalJpy, netPositionLots, adjusted, mode);
-                SetStatus($"{modeLabel}已更新：{DateTime.Now:HH:mm:ss}");
+                SetStatus(
+                    aggressive ? "status_aggressive_updated" : "status_conservative_updated",
+                    aggressive ? "积极策略已更新：{0:HH:mm:ss}" : "稳健策略已更新：{0:HH:mm:ss}",
+                    DateTime.Now);
             }
             catch (OperationCanceledException)
             {
-                SetStatus("已取消AI建议请求。");
+                SetStatus("status_ai_cancelled", "已取消AI建议请求。");
             }
             catch (Exception ex)
             {
-                SetStatus("AI建议请求失败。");
-                recommendationText.text = "当前未取得新的AI建议，请保留原持仓判断并检查配置。";
-                SetWarning(ex.Message);
+                SetStatus("status_ai_failed", "AI建议请求失败。");
+                FxTradeLocalization.Bind(
+                    recommendationText,
+                    "advice_failed",
+                    "当前未取得新的AI建议，请保留原持仓判断并检查配置。");
+                SetWarning("warning_error_detail", "错误：{0}", ex.Message);
             }
             finally
             {
@@ -654,10 +840,10 @@ namespace TestFXTrade.Fx.UI
             }
         }
 
-        private void BeginLoading(string task)
+        private void BeginLoading(string key, string fallback, params object[] arguments)
         {
             loadingOperationCount++;
-            SetLoadingTask(task);
+            SetLoadingTask(key, fallback, arguments);
 
             if (loadingOperationCount != 1)
             {
@@ -671,9 +857,12 @@ namespace TestFXTrade.Fx.UI
             }
         }
 
-        private void SetLoadingTask(string task)
+        private void SetLoadingTask(string key, string fallback, params object[] arguments)
         {
-            SetStatus(string.IsNullOrWhiteSpace(task) ? "正在处理请求" : task);
+            SetStatus(
+                string.IsNullOrWhiteSpace(key) ? "status_processing" : key,
+                string.IsNullOrWhiteSpace(fallback) ? "正在处理请求" : fallback,
+                arguments);
         }
 
         private void EndLoading()
@@ -723,8 +912,8 @@ namespace TestFXTrade.Fx.UI
                 double.IsInfinity(principalJpy) ||
                 principalJpy <= 0d)
             {
-                SetStatus("输入内容有误。");
-                SetWarning("本金必须是大于0的JPY金额。");
+                SetStatus("status_invalid_input", "输入内容有误。");
+                SetWarning("warning_principal", "本金必须是大于0的JPY金额。");
                 return false;
             }
 
@@ -733,8 +922,8 @@ namespace TestFXTrade.Fx.UI
                 double.IsNaN(netPositionQuantity) ||
                 double.IsInfinity(netPositionQuantity))
             {
-                SetStatus("输入内容有误。");
-                SetWarning("净建玉数量必须是数字：正数为多头，负数为空头，0为空仓。单位为通貨。");
+                SetStatus("status_invalid_input", "输入内容有误。");
+                SetWarning("warning_position", "净建玉数量必须是数字：正数为多头，负数为空头，0为空仓。单位为通貨。");
                 return false;
             }
 
@@ -745,15 +934,15 @@ namespace TestFXTrade.Fx.UI
                  double.IsInfinity(positionEntryPrice) ||
                  positionEntryPrice <= 0d))
             {
-                SetStatus("输入内容有误。");
-                SetWarning("USD/JPY建仓价必须是大于0的价格。");
+                SetStatus("status_invalid_input", "输入内容有误。");
+                SetWarning("warning_entry_price", "USD/JPY建仓价必须是大于0的价格。");
                 return false;
             }
 
             if (Math.Abs(netPositionQuantity) > 0.0000001d && positionEntryPrice <= 0d)
             {
-                SetStatus("输入内容有误。");
-                SetWarning("当前净建玉数量不为0时，请填写USD/JPY建仓价：数量正数=买入，负数=卖出。");
+                SetStatus("status_invalid_input", "输入内容有误。");
+                SetWarning("warning_missing_entry", "当前净建玉数量不为0时，请填写USD/JPY建仓价：数量正数=买入，负数=卖出。");
                 return false;
             }
 
@@ -792,8 +981,12 @@ namespace TestFXTrade.Fx.UI
                     advice.action = alternateAction;
                     maxOrderLots = alternateMaximum;
                     directionChanged = true;
-                    advice.summary = "原方向超出保证金限制，改为反向小额交易";
-                    advice.reasoning = "模型原方向在本地保证金上限下不可执行，因此选择可执行的反方向最小单。";
+                    advice.summary = FxTradeLocalization.Get(
+                        "guard_summary_reverse",
+                        "原方向超出保证金限制，改为反向小额交易");
+                    advice.reasoning = FxTradeLocalization.Get(
+                        "guard_reason_reverse",
+                        "模型原方向在本地保证金上限下不可执行，因此选择可执行的反方向最小单。");
                 }
             }
 
@@ -827,8 +1020,13 @@ namespace TestFXTrade.Fx.UI
             if (adjusted)
             {
                 advice.risk_warning = string.IsNullOrWhiteSpace(advice.risk_warning)
-                    ? "建议方向或建玉数量已由本地保证金保护规则调整。"
-                    : advice.risk_warning + " 本地保证金保护规则已调整建议方向或建玉数量。";
+                    ? FxTradeLocalization.Get(
+                        "guard_adjusted_empty",
+                        "建议方向或建玉数量已由本地保证金保护规则调整。")
+                    : FxTradeLocalization.Get(
+                        "guard_adjusted_append",
+                        "{0} 本地保证金保护规则已调整建议方向或建玉数量。",
+                        advice.risk_warning);
             }
 
             return adjusted;
@@ -856,37 +1054,59 @@ namespace TestFXTrade.Fx.UI
             bool adjusted,
             AiTradeAdviceMode mode)
         {
+            lastAdvice = advice;
+            lastAdvicePrincipalJpy = principalJpy;
+            lastAdviceCurrentNetLots = currentNetLots;
+            lastAdviceAdjusted = adjusted;
+            lastAdviceMode = mode;
+
             string actionLabel;
             double postTradeNetLots = currentNetLots;
             switch (advice.action)
             {
                 case "BUY":
-                    actionLabel = "买入";
+                    actionLabel = FxTradeLocalization.Get("action_buy", "买入");
                     postTradeNetLots += advice.suggested_lots;
                     break;
                 case "SELL":
-                    actionLabel = "卖出";
+                    actionLabel = FxTradeLocalization.Get("action_sell", "卖出");
                     postTradeNetLots -= advice.suggested_lots;
                     break;
                 default:
-                    actionLabel = "观望";
+                    actionLabel = FxTradeLocalization.Get("action_hold", "观望");
                     break;
             }
 
             double postTradeMargin = Math.Abs(postTradeNetLots) * sbiRules.RequiredMarginPerStandardLotJpy;
             double marginUsagePercent = principalJpy > 0d ? (postTradeMargin / principalJpy) * 100d : 0d;
-            string modeLabel = mode == AiTradeAdviceMode.ForcedDirectional ? "积极建议" : "稳健建议";
-            StringBuilder adviceText = new StringBuilder();
-            adviceText.AppendLine($"{modeLabel}：{actionLabel} 建玉数量 {FormatQuantityFromLots(advice.suggested_lots)}   置信度 {advice.confidence:P0}");
-            adviceText.AppendLine(NormalizeVisibleAdviceText(advice.summary));
-            adviceText.Append($"依据：{NormalizeVisibleAdviceText(advice.reasoning)}");
-            recommendationText.text = adviceText.ToString();
+            string modeLabel = mode == AiTradeAdviceMode.ForcedDirectional
+                ? FxTradeLocalization.Get("mode_aggressive_advice", "积极建议")
+                : FxTradeLocalization.Get("mode_conservative_advice", "稳健建议");
+            FxTradeLocalization.Bind(
+                recommendationText,
+                "advice_result",
+                "{0}：{1} 建玉数量 {2}   置信度 {3:P0}\n{4}\n依据：{5}",
+                modeLabel,
+                actionLabel,
+                FormatQuantityFromLots(advice.suggested_lots),
+                advice.confidence,
+                NormalizeVisibleAdviceText(advice.summary),
+                NormalizeVisibleAdviceText(advice.reasoning));
 
-            string adjustedText = adjusted ? " 已执行本地建玉数量保护。" : string.Empty;
-            string forcedDirectionWarning = mode == AiTradeAdviceMode.ForcedDirectional
-                ? " 积极模式会强制选择方向，不代表信号充分。"
+            string adjustedText = adjusted
+                ? FxTradeLocalization.Get("guard_applied", " 已执行本地建玉数量保护。")
                 : string.Empty;
-            SetWarning($"{NormalizeVisibleAdviceText(advice.risk_warning)} 预计交易后净建玉数量 {FormatQuantityFromLots(postTradeNetLots)}，保证金占本金 {marginUsagePercent:0.0}%。{adjustedText}{forcedDirectionWarning} AI建议仅供参考，不构成投资建议。");
+            string forcedDirectionWarning = mode == AiTradeAdviceMode.ForcedDirectional
+                ? FxTradeLocalization.Get("forced_direction_warning", " 积极模式会强制选择方向，不代表信号充分。")
+                : string.Empty;
+            SetWarning(
+                "warning_ai_result",
+                "{0} 预计交易后净建玉数量 {1}，保证金占本金 {2:0.0}%。{3}{4} AI建议仅供参考，不构成投资建议。",
+                NormalizeVisibleAdviceText(advice.risk_warning),
+                FormatQuantityFromLots(postTradeNetLots),
+                marginUsagePercent,
+                adjustedText,
+                forcedDirectionWarning);
         }
 
         private void RenderSbiRuleState()
@@ -898,14 +1118,22 @@ namespace TestFXTrade.Fx.UI
 
             if (sbiRules == null || !sbiRules.IsUsable)
             {
-                sbiRulesText.text = "SBI规则：尚未同步，请先读取官方最新规则。";
+                FxTradeLocalization.Bind(
+                    sbiRulesText,
+                    "sbi_not_synced",
+                    "SBI规则：尚未同步，请先读取官方最新规则。");
                 return;
             }
 
-            sbiRulesText.text =
-                $"SBI规则：{sbiRules.Leverage}倍 / {sbiRules.MarginRatePercent:0.##}% / " +
-                $"每1万通貨 {sbiRules.RequiredMarginPer10000Jpy:N0} JPY / " +
-                $"适用 {sbiRules.ApplicableDate} / 最小 {sbiRules.MinimumOrderUnits:N0} 通貨";
+            FxTradeLocalization.Bind(
+                sbiRulesText,
+                "sbi_summary",
+                "SBI规则：{0}倍 / {1:0.##}% / 每1万通貨 {2:N0} JPY / 适用 {3} / 最小 {4:N0} 通貨",
+                sbiRules.Leverage,
+                sbiRules.MarginRatePercent,
+                sbiRules.RequiredMarginPer10000Jpy,
+                sbiRules.ApplicableDate,
+                sbiRules.MinimumOrderUnits);
         }
 
         private CancellationToken GetMarketDataToken()
@@ -954,9 +1182,9 @@ namespace TestFXTrade.Fx.UI
             switch (sourceLabel)
             {
                 case "environment variable":
-                    return "环境变量";
+                    return FxTradeLocalization.Get("source_environment", "环境变量");
                 case "Resources/AzureRelayConfig.json":
-                    return "应用配置";
+                    return FxTradeLocalization.Get("source_app_config", "应用配置");
                 default:
                     return sourceLabel;
             }
@@ -964,9 +1192,25 @@ namespace TestFXTrade.Fx.UI
 
         private void RenderRelayState(string sourceLabel)
         {
-            marketSourceText.text = string.IsNullOrWhiteSpace(relayBaseUrl)
-                ? "行情与AI：尚未配置 Azure 中转"
-                : $"行情与AI：Azure后台中转（{LocalizeRelaySource(sourceLabel)}）";
+            if (marketSourceText == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(relayBaseUrl))
+            {
+                FxTradeLocalization.Bind(
+                    marketSourceText,
+                    "relay_not_configured",
+                    "行情与AI：尚未配置 Azure 中转");
+                return;
+            }
+
+            FxTradeLocalization.Bind(
+                marketSourceText,
+                "relay_configured",
+                "行情与AI：Azure后台中转（{0}）",
+                LocalizeRelaySource(sourceLabel));
         }
 
         private void CancelMarketDataRequests()
@@ -1005,7 +1249,10 @@ namespace TestFXTrade.Fx.UI
 
         private static string FormatQuantityFromLots(double lots)
         {
-            return $"{FormatBaseCurrencyUnits(StandardLotsToCurrencyUnits(lots))} 通貨";
+            return FxTradeLocalization.Get(
+                "formatted_quantity",
+                "{0} 通貨",
+                FormatBaseCurrencyUnits(StandardLotsToCurrencyUnits(lots)));
         }
 
         private static string FormatBaseCurrencyUnits(double quantity)
@@ -1018,14 +1265,24 @@ namespace TestFXTrade.Fx.UI
         {
             if (Math.Abs(netPositionQuantity) <= 0.0000001d)
             {
-                return "当前净建玉数量 0 通貨（空仓）";
+                return FxTradeLocalization.Get("position_flat", "当前净建玉数量 0 通貨（空仓）");
             }
 
-            string sideLabel = netPositionQuantity > 0d ? "正数=买入" : "负数=卖出";
+            string sideLabel = netPositionQuantity > 0d
+                ? FxTradeLocalization.Get("position_side_long", "正数=买入")
+                : FxTradeLocalization.Get("position_side_short", "负数=卖出");
             string entryText = entryPrice > 0d
-                ? $"，建仓价 USD/JPY {FormatUsdJpyPrice(entryPrice)}"
-                : "，建仓价未填写";
-            return $"当前净建玉数量 {FormatBaseCurrencyUnits(netPositionQuantity)} 通貨（{sideLabel}{entryText}）";
+                ? FxTradeLocalization.Get(
+                    "position_entry_present",
+                    "，建仓价 USD/JPY {0}",
+                    FormatUsdJpyPrice(entryPrice))
+                : FxTradeLocalization.Get("position_entry_missing", "，建仓价未填写");
+            return FxTradeLocalization.Get(
+                "position_summary",
+                "当前净建玉数量 {0} 通貨（{1}{2}）",
+                FormatBaseCurrencyUnits(netPositionQuantity),
+                sideLabel,
+                entryText);
         }
 
         private static string FormatUsdJpyPrice(double price)
@@ -1048,11 +1305,16 @@ namespace TestFXTrade.Fx.UI
                     return match.Value;
                 }
 
-                return $"建玉数量 {FormatQuantityFromLots(lots)}";
+                return FxTradeLocalization.Get(
+                    "normalized_position_size",
+                    "建玉数量 {0}",
+                    FormatQuantityFromLots(lots));
             });
 
-            return VisibleLotWordPattern.Replace(normalized, "建玉数量")
-                .Replace("手数", "建玉数量");
+            string localizedPositionSize = FxTradeLocalization.Get("position_size", "建玉数量");
+            return VisibleLotWordPattern.Replace(normalized, localizedPositionSize)
+                .Replace("手数", localizedPositionSize)
+                .Replace("ロット", localizedPositionSize);
         }
 
         private double ParseInput(TMP_InputField input, double fallback)
@@ -1065,20 +1327,23 @@ namespace TestFXTrade.Fx.UI
             return value;
         }
 
-        private void SetStatus(string message)
+        private void SetStatus(string key, string fallback, params object[] arguments)
         {
-            if (statusText != null)
-            {
-                statusText.text = message;
-            }
+            FxTradeLocalization.Bind(statusText, key, fallback, arguments);
         }
 
-        private void SetWarning(string message)
+        private void SetWarning(string key, string fallback, params object[] arguments)
         {
-            if (warningsText != null)
+            if (arguments == null || arguments.Length == 0)
             {
-                warningsText.text = string.IsNullOrWhiteSpace(message) ? "AI建议仅供参考，不构成投资建议。" : message;
+                arguments = Array.Empty<object>();
             }
+
+            FxTradeLocalization.Bind(
+                warningsText,
+                string.IsNullOrWhiteSpace(key) ? "warning_default" : key,
+                string.IsNullOrWhiteSpace(fallback) ? "AI建议仅供参考，不构成投资建议。" : fallback,
+                arguments);
         }
 
         private static void ConfigurePortraitRuntime()
