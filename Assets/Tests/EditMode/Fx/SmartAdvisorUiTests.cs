@@ -226,42 +226,53 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 "Assets/UI/Addressable/FxTradeUsageGuideWindow.prefab");
             GameObject advicePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
                 "Assets/UI/Addressable/FxTradeAdviceWindow.prefab");
+            MethodInfo ensureWindowSafeArea = typeof(FxTradeAdvisorApp).GetMethod(
+                "EnsureWindowSafeAreaContent",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.NotNull(ensureWindowSafeArea);
 
             GameObject settingsInstance = UnityEngine.Object.Instantiate(settingsPrefab);
+            RectTransform settingsSafeArea = (RectTransform)ensureWindowSafeArea.Invoke(
+                null,
+                new object[] { settingsInstance.transform });
+            Assert.AreEqual(settingsSafeArea, settingsInstance.transform.Find("Safe Area Content"));
             bool languageRequested = false;
             bool closeRequested = false;
             FxTradeSettingsWindow settingsWindow = settingsInstance.GetComponent<FxTradeSettingsWindow>();
             settingsWindow.Initialize(
                 () => languageRequested = true,
                 () => closeRequested = true);
-            settingsInstance.transform.Find("Settings Panel/Language Settings Button").GetComponent<Button>().onClick.Invoke();
-            settingsInstance.transform.Find("Settings Panel/Close Settings Button").GetComponent<Button>().onClick.Invoke();
+            settingsInstance.transform.Find("Safe Area Content/Settings Panel/Language Settings Button").GetComponent<Button>().onClick.Invoke();
+            settingsInstance.transform.Find("Safe Area Content/Settings Panel/Close Settings Button").GetComponent<Button>().onClick.Invoke();
             Assert.IsTrue(languageRequested);
             Assert.IsTrue(closeRequested);
             UnityEngine.Object.DestroyImmediate(settingsInstance);
             Assert.IsTrue(settingsInstance == null);
 
             GameObject languageInstance = UnityEngine.Object.Instantiate(languagePrefab);
+            ensureWindowSafeArea.Invoke(null, new object[] { languageInstance.transform });
             bool languageBackRequested = false;
             FxTradeLanguageWindow languageWindow = languageInstance.GetComponent<FxTradeLanguageWindow>();
             languageWindow.Initialize(null, () => languageBackRequested = true);
             Assert.AreEqual(3, languageWindow.LanguageDropdown.options.Count);
-            languageInstance.transform.Find("Language Panel/Back Button").GetComponent<Button>().onClick.Invoke();
+            languageInstance.transform.Find("Safe Area Content/Language Panel/Back Button").GetComponent<Button>().onClick.Invoke();
             Assert.IsTrue(languageBackRequested);
             UnityEngine.Object.DestroyImmediate(languageInstance);
             Assert.IsTrue(languageInstance == null);
 
             GameObject guideInstance = UnityEngine.Object.Instantiate(guidePrefab);
+            ensureWindowSafeArea.Invoke(null, new object[] { guideInstance.transform });
             bool guideBackRequested = false;
             FxTradeUsageGuideWindow guideWindow = guideInstance.GetComponent<FxTradeUsageGuideWindow>();
             guideWindow.Initialize(() => guideBackRequested = true);
             Assert.That(guideWindow.BodyText.text, Does.Contain("AzureRelayConfig.json"));
-            guideInstance.transform.Find("Usage Guide Page/Usage Guide Header/Back Button").GetComponent<Button>().onClick.Invoke();
+            guideInstance.transform.Find("Safe Area Content/Usage Guide Page/Usage Guide Header/Back Button").GetComponent<Button>().onClick.Invoke();
             Assert.IsTrue(guideBackRequested);
             UnityEngine.Object.DestroyImmediate(guideInstance);
             Assert.IsTrue(guideInstance == null);
 
             GameObject adviceInstance = UnityEngine.Object.Instantiate(advicePrefab);
+            ensureWindowSafeArea.Invoke(null, new object[] { adviceInstance.transform });
             bool adviceCloseRequested = false;
             FxTradeAdviceWindow adviceWindow = adviceInstance.GetComponent<FxTradeAdviceWindow>();
             adviceWindow.Initialize(
@@ -270,10 +281,42 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 () => adviceCloseRequested = true);
             Assert.AreEqual("测试建议正文", adviceWindow.BodyText.text);
             Assert.That(adviceWindow.GeneratedAtText.text, Does.Contain("2026-07-16 18:42"));
-            adviceInstance.transform.Find("Advice Page/Advice Header/Close Button").GetComponent<Button>().onClick.Invoke();
+            adviceInstance.transform.Find("Safe Area Content/Advice Page/Advice Header/Close Button").GetComponent<Button>().onClick.Invoke();
             Assert.IsTrue(adviceCloseRequested);
             UnityEngine.Object.DestroyImmediate(adviceInstance);
             Assert.IsTrue(adviceInstance == null);
+        }
+
+        [Test]
+        public void SafeAreaAnchorsMatchIPhoneScreenInsets()
+        {
+            GameObject host = new GameObject("Safe Area Test Host", typeof(RectTransform));
+            GameObject content = new GameObject("Safe Area Content", typeof(RectTransform));
+            content.transform.SetParent(host.transform, false);
+
+            try
+            {
+                MethodInfo applySafeArea = typeof(FxTradeAdvisorApp).GetMethod(
+                    "ApplySafeArea",
+                    BindingFlags.Static | BindingFlags.NonPublic);
+                Assert.NotNull(applySafeArea);
+
+                RectTransform contentRect = content.GetComponent<RectTransform>();
+                Rect iPhoneSafeArea = new Rect(0f, 102f, 1179f, 2352f);
+                Vector2Int screenSize = new Vector2Int(1179, 2556);
+                applySafeArea.Invoke(null, new object[] { contentRect, iPhoneSafeArea, screenSize });
+
+                Assert.AreEqual(0f, contentRect.anchorMin.x, 0.0001f);
+                Assert.AreEqual(102f / 2556f, contentRect.anchorMin.y, 0.0001f);
+                Assert.AreEqual(1f, contentRect.anchorMax.x, 0.0001f);
+                Assert.AreEqual(2454f / 2556f, contentRect.anchorMax.y, 0.0001f);
+                Assert.AreEqual(Vector2.zero, contentRect.offsetMin);
+                Assert.AreEqual(Vector2.zero, contentRect.offsetMax);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(host);
+            }
         }
 
         [Test]

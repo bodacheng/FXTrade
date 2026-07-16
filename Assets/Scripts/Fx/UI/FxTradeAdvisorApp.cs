@@ -132,6 +132,7 @@ namespace TestFXTrade.Fx.UI
         private bool aiAdviceInFlight;
         private int loadingOperationCount;
         private GameObject activeAddressableWindow;
+        private RectTransform activeAddressableWindowSafeAreaRect;
         private int addressableWindowRequestVersion;
 
         private enum AddressableWindowKind
@@ -281,11 +282,10 @@ namespace TestFXTrade.Fx.UI
             topAccentImage.color = new Color32(49, 181, 233, 210);
             topAccentImage.raycastTarget = false;
 
-            GameObject content = CreateUiObject("Safe Area Content", root.transform);
+            Transform content = CreateSafeAreaContent(root.transform);
             safeAreaContentRect = content.GetComponent<RectTransform>();
-            Stretch(safeAreaContentRect);
 
-            VerticalLayoutGroup contentGroup = content.AddComponent<VerticalLayoutGroup>();
+            VerticalLayoutGroup contentGroup = content.gameObject.AddComponent<VerticalLayoutGroup>();
             contentGroup.padding = new RectOffset(12, 12, 12, 12);
             contentGroup.spacing = 8;
             contentGroup.childControlWidth = true;
@@ -487,6 +487,8 @@ namespace TestFXTrade.Fx.UI
             activeAddressableWindow = handle.Result;
             activeAddressableWindow.name = kind + " Window";
             activeAddressableWindow.transform.SetAsLastSibling();
+            activeAddressableWindowSafeAreaRect = EnsureWindowSafeAreaContent(activeAddressableWindow.transform);
+            RefreshAdaptiveLayout(true);
             ApplyRuntimeFontToRoot(activeAddressableWindow.transform);
             BindStaticUiTexts(activeAddressableWindow.transform);
 
@@ -589,6 +591,7 @@ namespace TestFXTrade.Fx.UI
 
         private void ReleaseActiveAddressableWindow()
         {
+            activeAddressableWindowSafeAreaRect = null;
             if (activeAddressableWindow == null)
             {
                 return;
@@ -1371,10 +1374,11 @@ namespace TestFXTrade.Fx.UI
             Stretch(overlayRect);
             Image overlayBackground = settingsOverlay.AddComponent<Image>();
             overlayBackground.color = new Color32(5, 7, 10, 190);
+            Transform safeAreaContent = CreateSafeAreaContent(settingsOverlay.transform);
 
             GameObject panel = CreatePanel(
                 "Settings Panel",
-                settingsOverlay.transform,
+                safeAreaContent,
                 new Color32(31, 35, 41, 255));
             RectTransform panelRect = panel.GetComponent<RectTransform>();
             panelRect.anchorMin = new Vector2(0.5f, 0.5f);
@@ -1447,10 +1451,11 @@ namespace TestFXTrade.Fx.UI
             Stretch(overlayRect);
             Image overlayBackground = languageOverlay.AddComponent<Image>();
             overlayBackground.color = new Color32(5, 7, 10, 205);
+            Transform safeAreaContent = CreateSafeAreaContent(languageOverlay.transform);
 
             GameObject panel = CreatePanel(
                 "Language Panel",
-                languageOverlay.transform,
+                safeAreaContent,
                 new Color32(31, 35, 41, 255));
             RectTransform panelRect = panel.GetComponent<RectTransform>();
             panelRect.anchorMin = new Vector2(0.5f, 0.5f);
@@ -1511,10 +1516,11 @@ namespace TestFXTrade.Fx.UI
             Stretch(overlayRect);
             Image overlayBackground = usageGuideOverlay.AddComponent<Image>();
             overlayBackground.color = new Color32(7, 11, 16, 255);
+            Transform safeAreaContent = CreateSafeAreaContent(usageGuideOverlay.transform);
 
             GameObject page = CreatePanel(
                 "Usage Guide Page",
-                usageGuideOverlay.transform,
+                safeAreaContent,
                 new Color32(18, 25, 35, 255));
             RectTransform pageRect = page.GetComponent<RectTransform>();
             pageRect.anchorMin = new Vector2(0.04f, 0.035f);
@@ -1581,10 +1587,11 @@ namespace TestFXTrade.Fx.UI
             Stretch(overlayRect);
             Image overlayBackground = adviceOverlay.AddComponent<Image>();
             overlayBackground.color = new Color32(5, 9, 14, 238);
+            Transform safeAreaContent = CreateSafeAreaContent(adviceOverlay.transform);
 
             GameObject page = CreatePanel(
                 "Advice Page",
-                adviceOverlay.transform,
+                safeAreaContent,
                 new Color32(15, 23, 31, 255));
             RectTransform pageRect = page.GetComponent<RectTransform>();
             pageRect.anchorMin = new Vector2(0.035f, 0.03f);
@@ -2234,6 +2241,10 @@ namespace TestFXTrade.Fx.UI
             lastSafeArea = safeArea;
             lastScreenSize = screenSize;
             ApplySafeArea(safeAreaContentRect, safeArea, screenSize);
+            if (activeAddressableWindowSafeAreaRect != null)
+            {
+                ApplySafeArea(activeAddressableWindowSafeAreaRect, safeArea, screenSize);
+            }
 
             float safeWidthRatio = Mathf.Clamp(safeArea.width / screenSize.x, 0.01f, 1f);
             float safeHeightRatio = Mathf.Clamp(safeArea.height / screenSize.y, 0.01f, 1f);
@@ -2242,6 +2253,10 @@ namespace TestFXTrade.Fx.UI
                 MobileReferenceResolution.y / safeHeightRatio);
 
             LayoutRebuilder.ForceRebuildLayoutImmediate(safeAreaContentRect);
+            if (activeAddressableWindowSafeAreaRect != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(activeAddressableWindowSafeAreaRect);
+            }
         }
 
         private static void ApplySafeArea(RectTransform rect, Rect safeArea, Vector2Int screenSize)
@@ -2257,6 +2272,38 @@ namespace TestFXTrade.Fx.UI
             rect.anchorMax = anchorMax;
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = Vector2.zero;
+        }
+
+        private static Transform CreateSafeAreaContent(Transform parent)
+        {
+            GameObject content = new GameObject("Safe Area Content", typeof(RectTransform));
+            content.transform.SetParent(parent, false);
+            Stretch(content.GetComponent<RectTransform>());
+            return content.transform;
+        }
+
+        private static RectTransform EnsureWindowSafeAreaContent(Transform windowRoot)
+        {
+            RectTransform existing = windowRoot.Find("Safe Area Content") as RectTransform;
+            if (existing != null)
+            {
+                return existing;
+            }
+
+            List<Transform> windowChildren = new List<Transform>(windowRoot.childCount);
+            for (int i = 0; i < windowRoot.childCount; i++)
+            {
+                windowChildren.Add(windowRoot.GetChild(i));
+            }
+
+            Transform safeAreaContent = CreateSafeAreaContent(windowRoot);
+            safeAreaContent.SetAsFirstSibling();
+            for (int i = 0; i < windowChildren.Count; i++)
+            {
+                windowChildren[i].SetParent(safeAreaContent, false);
+            }
+
+            return safeAreaContent.GetComponent<RectTransform>();
         }
 
         private Canvas CreateCanvas()
