@@ -176,7 +176,7 @@ namespace TestFXTrade.Fx.UI
         private void Awake()
         {
             ConfigurePortraitRuntime();
-            FxTradeLocalization.ApplySavedLocale();
+            _ = FxTradeLocalization.ApplySavedLocaleAsync();
             font = CreateChineseUiFont();
 
             if (uiCanvas == null)

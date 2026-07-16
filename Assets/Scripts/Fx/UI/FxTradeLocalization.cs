@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Threading.Tasks;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Localization;
@@ -31,12 +32,27 @@ namespace TestFXTrade.Fx.UI
             "日本語"
         };
 
-        public static void ApplySavedLocale()
+        public static async Task ApplySavedLocaleAsync()
         {
             string savedLocale = PlayerPrefs.GetString(SavedLocaleKey, string.Empty);
-            if (!string.IsNullOrWhiteSpace(savedLocale))
+            if (string.IsNullOrWhiteSpace(savedLocale))
             {
+                return;
+            }
+
+            try
+            {
+                var initialization = LocalizationSettings.InitializationOperation;
+                if (!initialization.IsDone)
+                {
+                    await initialization.Task;
+                }
+
                 TrySelectLocale(savedLocale, false);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"Unable to restore locale '{savedLocale}': {exception.Message}");
             }
         }
 
@@ -54,7 +70,13 @@ namespace TestFXTrade.Fx.UI
         {
             try
             {
-                LocalizationSettings.InitializationOperation.WaitForCompletion();
+                if (!LocalizationSettings.InitializationOperation.IsDone)
+                {
+                    Debug.LogWarning(
+                        $"Unable to select locale '{localeCode}' before localization initialization completes.");
+                    return false;
+                }
+
                 Locale locale = LocalizationSettings.AvailableLocales.GetLocale(new LocaleIdentifier(localeCode));
                 if (locale == null)
                 {
@@ -95,6 +117,16 @@ namespace TestFXTrade.Fx.UI
         {
             try
             {
+                if (!LocalizationSettings.InitializationOperation.IsDone)
+                {
+                    string savedLocale = PlayerPrefs.GetString(SavedLocaleKey, DefaultLocaleCode);
+                    return Array.Exists(
+                        SupportedLocaleCodes,
+                        code => string.Equals(code, savedLocale, StringComparison.OrdinalIgnoreCase))
+                        ? savedLocale
+                        : DefaultLocaleCode;
+                }
+
                 Locale locale = LocalizationSettings.SelectedLocale;
                 return locale == null ? DefaultLocaleCode : locale.Identifier.Code;
             }
@@ -154,12 +186,23 @@ namespace TestFXTrade.Fx.UI
             string fallback = FormatFallback(chineseFallback, arguments);
             try
             {
-                string localized = LocalizationSettings.StringDatabase.GetLocalizedString(
+                if (!LocalizationSettings.InitializationOperation.IsDone)
+                {
+                    return fallback;
+                }
+
+                var operation = LocalizationSettings.StringDatabase.GetLocalizedStringAsync(
                     TableName,
                     key,
                     LocalizationSettings.SelectedLocale,
                     FallbackBehavior.UseProjectSettings,
                     arguments);
+                if (!operation.IsDone || operation.Status != UnityEngine.ResourceManagement.AsyncOperations.AsyncOperationStatus.Succeeded)
+                {
+                    return fallback;
+                }
+
+                string localized = operation.Result;
                 return string.IsNullOrEmpty(localized) || string.Equals(localized, key, StringComparison.Ordinal)
                     ? fallback
                     : localized;

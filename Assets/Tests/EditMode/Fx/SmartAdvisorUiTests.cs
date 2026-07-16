@@ -646,5 +646,34 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 LocalizationSettings.SelectedLocale = originalLocale ?? chinese;
             }
         }
+
+        [Test]
+        public async System.Threading.Tasks.Task SavedLocaleIsRestoredAsynchronously()
+        {
+            const string savedLocaleKey = "TestFXTrade.SelectedLocale";
+            LocalizationSettings.InitializationOperation.WaitForCompletion();
+            Locale originalLocale = LocalizationSettings.SelectedLocale;
+            bool hadSavedLocale = PlayerPrefs.HasKey(savedLocaleKey);
+            string originalSavedLocale = PlayerPrefs.GetString(savedLocaleKey, string.Empty);
+
+            try
+            {
+                PlayerPrefs.SetString(savedLocaleKey, "ja");
+                await FxTradeLocalization.ApplySavedLocaleAsync();
+                Assert.AreEqual("ja", FxTradeLocalization.GetSelectedLocaleCode());
+            }
+            finally
+            {
+                LocalizationSettings.SelectedLocale = originalLocale;
+                if (hadSavedLocale)
+                {
+                    PlayerPrefs.SetString(savedLocaleKey, originalSavedLocale);
+                }
+                else
+                {
+                    PlayerPrefs.DeleteKey(savedLocaleKey);
+                }
+            }
+        }
     }
 }
