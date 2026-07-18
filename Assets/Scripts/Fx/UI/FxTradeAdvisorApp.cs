@@ -28,6 +28,9 @@ namespace TestFXTrade.Fx.UI
         private const int CandleOutputSize = 160;
         private const int DynamicFontSize = 90;
         private const string PageResourcePath = "Pages/FxTradeAdvisorPage";
+        private const string StartupCurtainName = "Startup Curtain";
+        private const string AppTitlePath =
+            "Root/Safe Area Content/Header Card/Header Bar/Brand Block/Text";
         public const string SettingsWindowAddress = "TestFXTrade/UI/SettingsWindow";
         public const string LanguageWindowAddress = "TestFXTrade/UI/LanguageWindow";
         public const string UsageGuideWindowAddress = "TestFXTrade/UI/UsageGuideWindow";
@@ -131,6 +134,7 @@ namespace TestFXTrade.Fx.UI
         private bool sbiSyncInFlight;
         private bool aiAdviceInFlight;
         private int loadingOperationCount;
+        private GameObject startupCurtain;
         private GameObject activeAddressableWindow;
         private RectTransform activeAddressableWindowSafeAreaRect;
         private int addressableWindowRequestVersion;
@@ -176,12 +180,13 @@ namespace TestFXTrade.Fx.UI
         private void Awake()
         {
             ConfigurePortraitRuntime();
-            _ = FxTradeLocalization.ApplySavedLocaleAsync();
+            ShowStartupCurtain();
             font = CreateChineseUiFont();
 
             if (uiCanvas == null)
             {
                 BuildUi();
+                ShowStartupCurtain();
                 return;
             }
 
@@ -198,7 +203,26 @@ namespace TestFXTrade.Fx.UI
             PrepareBoundSceneUi();
         }
 
-        private void Start()
+        private async void Start()
+        {
+            await FxTradeLocalization.ApplySavedLocaleAsync();
+            if (this == null || !enabled || uiCanvas == null)
+            {
+                return;
+            }
+
+            FxTradeLocalization.RefreshBindings(uiCanvas.transform);
+            StartApplication();
+            Canvas.ForceUpdateCanvases();
+            await Task.Yield();
+
+            if (this != null)
+            {
+                HideStartupCurtain();
+            }
+        }
+
+        private void StartApplication()
         {
             AzureRelaySettings settings = AzureRelaySettings.Load();
             relayBaseUrl = settings.BaseUrl;
@@ -257,6 +281,7 @@ namespace TestFXTrade.Fx.UI
             CancelAdvisoryRequests();
             addressableWindowRequestVersion++;
             ReleaseActiveAddressableWindow();
+            startupCurtain = null;
         }
 
         private void BuildUi()
@@ -342,6 +367,7 @@ namespace TestFXTrade.Fx.UI
         {
             EnsureEventSystem();
             ApplyRuntimeFontToCanvas();
+            ConfigureAppTitleLayout();
             BindStaticUiTexts(uiCanvas.transform);
             BindUiEvents();
             UpdateAdviceButtonState();
@@ -356,6 +382,32 @@ namespace TestFXTrade.Fx.UI
             }
 
             ApplyRuntimeFontToRoot(uiCanvas.transform);
+        }
+
+        private void ConfigureAppTitleLayout()
+        {
+            if (uiCanvas == null)
+            {
+                return;
+            }
+
+            Transform titleTransform = uiCanvas.transform.Find(AppTitlePath);
+            TMP_Text title = titleTransform == null ? null : titleTransform.GetComponent<TMP_Text>();
+            if (title == null)
+            {
+                return;
+            }
+
+            ConfigureAppTitle(title);
+        }
+
+        private static void ConfigureAppTitle(TMP_Text title)
+        {
+            title.textWrappingMode = TextWrappingModes.NoWrap;
+            title.overflowMode = TextOverflowModes.Ellipsis;
+            title.enableAutoSizing = true;
+            title.fontSizeMin = 14f;
+            title.fontSizeMax = 22f;
         }
 
         private void ApplyRuntimeFontToRoot(Transform root)
@@ -2376,11 +2428,47 @@ namespace TestFXTrade.Fx.UI
         private TMP_Text AddHeader(Transform parent, string text)
         {
             TMP_Text label = AddText(parent, text, 22, FontStyles.Bold, new Color32(244, 247, 251, 255));
+            ConfigureAppTitle(label);
             LayoutElement layout = label.gameObject.AddComponent<LayoutElement>();
             layout.minHeight = 32;
             layout.preferredHeight = 32;
             layout.flexibleWidth = 1;
             return label;
+        }
+
+        private void ShowStartupCurtain()
+        {
+            if (uiCanvas == null)
+            {
+                return;
+            }
+
+            Transform existing = uiCanvas.transform.Find(StartupCurtainName);
+            if (existing != null)
+            {
+                startupCurtain = existing.gameObject;
+                startupCurtain.SetActive(true);
+                startupCurtain.transform.SetAsLastSibling();
+                return;
+            }
+
+            startupCurtain = CreateUiObject(StartupCurtainName, uiCanvas.transform);
+            Stretch(startupCurtain.GetComponent<RectTransform>());
+            Image curtainImage = startupCurtain.AddComponent<Image>();
+            curtainImage.color = Color.black;
+            curtainImage.raycastTarget = true;
+            startupCurtain.transform.SetAsLastSibling();
+        }
+
+        private void HideStartupCurtain()
+        {
+            if (startupCurtain == null)
+            {
+                return;
+            }
+
+            DestroyRuntimeObject(startupCurtain);
+            startupCurtain = null;
         }
 
         private Transform CreateHeaderBar(Transform parent)

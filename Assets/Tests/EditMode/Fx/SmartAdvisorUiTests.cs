@@ -58,6 +58,15 @@ namespace TestFXTrade.Tests.EditMode.Fx
             Assert.IsNull(pagePrefab.transform.Find("Root/Safe Area Content/Advice Card"));
             Assert.NotNull(pagePrefab.transform.Find("Root/Safe Area Content/Warning Card"));
             Assert.NotNull(pagePrefab.transform.Find("Root/Safe Area Content/Header Card/Header Bar/Header Actions/Loading Indicator"));
+            TMP_Text appTitle = pagePrefab.transform
+                .Find("Root/Safe Area Content/Header Card/Header Bar/Brand Block/Text")
+                .GetComponent<TMP_Text>();
+            Assert.NotNull(appTitle);
+            Assert.AreEqual(TextWrappingModes.NoWrap, appTitle.textWrappingMode);
+            Assert.AreEqual(TextOverflowModes.Ellipsis, appTitle.overflowMode);
+            Assert.IsTrue(appTitle.enableAutoSizing);
+            Assert.AreEqual(14f, appTitle.fontSizeMin);
+            Assert.AreEqual(22f, appTitle.fontSizeMax);
             Transform prefabSettingsButton = pagePrefab.transform.Find(
                 "Root/Safe Area Content/Header Card/Header Bar/Header Actions/Settings Button");
             Assert.NotNull(prefabSettingsButton);
@@ -351,6 +360,13 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 awake.Invoke(app, null);
                 canvasObject = GameObject.Find("USDJPY Advisor Canvas");
                 Assert.NotNull(canvasObject);
+                Transform startupCurtain = canvasObject.transform.Find("Startup Curtain");
+                Assert.NotNull(startupCurtain);
+                Assert.AreEqual(canvasObject.transform.childCount - 1, startupCurtain.GetSiblingIndex());
+                Image startupCurtainImage = startupCurtain.GetComponent<Image>();
+                Assert.NotNull(startupCurtainImage);
+                Assert.AreEqual(Color.black, startupCurtainImage.color);
+                Assert.IsTrue(startupCurtainImage.raycastTarget);
 
                 Canvas.ForceUpdateCanvases();
                 Assert.NotNull(Resources.Load<Font>("Fonts/NotoSansSC-Regular"));

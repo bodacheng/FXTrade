@@ -35,11 +35,6 @@ namespace TestFXTrade.Fx.UI
         public static async Task ApplySavedLocaleAsync()
         {
             string savedLocale = PlayerPrefs.GetString(SavedLocaleKey, string.Empty);
-            if (string.IsNullOrWhiteSpace(savedLocale))
-            {
-                return;
-            }
-
             try
             {
                 var initialization = LocalizationSettings.InitializationOperation;
@@ -48,11 +43,23 @@ namespace TestFXTrade.Fx.UI
                     await initialization.Task;
                 }
 
-                TrySelectLocale(savedLocale, false);
+                if (!string.IsNullOrWhiteSpace(savedLocale))
+                {
+                    TrySelectLocale(savedLocale, false);
+                }
+
+                var preload = LocalizationSettings.StringDatabase.PreloadTables(
+                    TableName,
+                    LocalizationSettings.SelectedLocale);
+                if (!preload.IsDone)
+                {
+                    await preload.Task;
+                }
             }
             catch (Exception exception)
             {
-                Debug.LogWarning($"Unable to restore locale '{savedLocale}': {exception.Message}");
+                Debug.LogWarning(
+                    $"Unable to prepare locale '{savedLocale}' for the initial UI: {exception.Message}");
             }
         }
 
@@ -156,7 +163,7 @@ namespace TestFXTrade.Fx.UI
                 return;
             }
 
-            target.text = FormatFallback(chineseFallback, arguments);
+            target.text = Get(key, chineseFallback, arguments);
 
             LocalizeStringEvent localizer = target.GetComponent<LocalizeStringEvent>();
             if (localizer == null)
@@ -179,6 +186,20 @@ namespace TestFXTrade.Fx.UI
             };
             localizer.StringReference = reference;
             localizer.RefreshString();
+        }
+
+        public static void RefreshBindings(Transform root)
+        {
+            if (root == null)
+            {
+                return;
+            }
+
+            LocalizeStringEvent[] localizers = root.GetComponentsInChildren<LocalizeStringEvent>(true);
+            for (int i = 0; i < localizers.Length; i++)
+            {
+                localizers[i].RefreshString();
+            }
         }
 
         public static string Get(string key, string chineseFallback, params object[] arguments)
