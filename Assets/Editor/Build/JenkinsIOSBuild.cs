@@ -59,6 +59,7 @@ namespace TestFXTrade.Editor.Build
             PlayerSettings.SetApplicationIdentifier(UnityEditor.Build.NamedBuildTarget.iOS, BundleIdentifier);
             PlayerSettings.bundleVersion = ReadNonEmptyArgument("-bundleVersion", DefaultBundleVersion);
             PlayerSettings.iOS.buildNumber = ReadNonEmptyArgument("-buildNumber", "1");
+            PlayerSettings.iOS.targetDevice = iOSTargetDevice.iPhoneOnly;
             PlayerSettings.iOS.appleDeveloperTeamID = AppleTeamId;
             PlayerSettings.iOS.appleEnableAutomaticSigning = true;
             PlayerSettings.iOS.iOSManualProvisioningProfileID = string.Empty;
