@@ -29,7 +29,7 @@ namespace TestFXTrade.Fx.MarketData
 
             if (response == null || response.price <= 0d)
             {
-                throw new InvalidOperationException("Azure中转未返回有效报价。");
+                throw new InvalidOperationException("行情服务未返回有效报价。");
             }
 
             DateTime timeUtc = ParseDateTime(response.timeUtc, DateTime.UtcNow);
@@ -53,7 +53,7 @@ namespace TestFXTrade.Fx.MarketData
 
             if (response?.candles == null || response.candles.Length == 0)
             {
-                throw new InvalidOperationException("Azure中转未返回K线数据。");
+                throw new InvalidOperationException("行情服务未返回K线数据。");
             }
 
             List<Candle> candles = new List<Candle>(response.candles.Length);
@@ -62,7 +62,7 @@ namespace TestFXTrade.Fx.MarketData
                 AzureRelayCandle row = response.candles[i];
                 if (row == null || row.open <= 0d || row.high <= 0d || row.low <= 0d || row.close <= 0d)
                 {
-                    throw new InvalidOperationException("Azure中转返回了无效K线。");
+                    throw new InvalidOperationException("行情服务返回了无效K线。");
                 }
 
                 candles.Add(new Candle(
@@ -80,7 +80,7 @@ namespace TestFXTrade.Fx.MarketData
         {
             if (string.IsNullOrWhiteSpace(relayBaseUrl))
             {
-                throw new InvalidOperationException("尚未配置 Azure 中转地址。");
+                throw new InvalidOperationException("行情服务暂不可用，请稍后重试。");
             }
         }
 
@@ -114,7 +114,7 @@ namespace TestFXTrade.Fx.MarketData
                     AzureRelayErrorResponse response = JsonUtility.FromJson<AzureRelayErrorResponse>(responseJson);
                     if (!string.IsNullOrWhiteSpace(response?.error))
                     {
-                        return $"Azure中转请求失败：{response.error}";
+                        return $"行情服务请求失败：{response.error}";
                     }
                 }
                 catch (Exception)
@@ -122,7 +122,7 @@ namespace TestFXTrade.Fx.MarketData
                 }
             }
 
-            return $"Azure中转请求失败：{fallback}";
+            return $"行情服务请求失败：{fallback}";
         }
 
         private static DateTime ParseDateTime(string value, DateTime fallback)

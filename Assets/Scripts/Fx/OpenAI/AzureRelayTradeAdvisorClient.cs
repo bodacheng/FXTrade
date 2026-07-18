@@ -38,7 +38,7 @@ namespace TestFXTrade.Fx.OpenAI
         {
             if (string.IsNullOrWhiteSpace(relayBaseUrl))
             {
-                throw new InvalidOperationException("尚未配置 Azure 中转地址。");
+                throw new InvalidOperationException("AI 服务暂不可用，请稍后重试。");
             }
 
             if (string.IsNullOrWhiteSpace(prompt))
@@ -81,7 +81,7 @@ namespace TestFXTrade.Fx.OpenAI
         {
             if (string.IsNullOrWhiteSpace(responseJson))
             {
-                throw new InvalidOperationException("Azure中转返回了空的AI响应。");
+                throw new InvalidOperationException("AI 服务返回了空响应。");
             }
 
             OpenAiTradeAdvice advice = JsonUtility.FromJson<OpenAiTradeAdvice>(responseJson);
@@ -123,7 +123,7 @@ namespace TestFXTrade.Fx.OpenAI
         {
             if (advice == null)
             {
-                throw new InvalidOperationException("Azure中转返回的建议内容为空。");
+                throw new InvalidOperationException("AI 服务返回的建议内容为空。");
             }
 
             string action = (advice.action ?? string.Empty).Trim().ToUpperInvariant();
@@ -159,7 +159,7 @@ namespace TestFXTrade.Fx.OpenAI
                     AzureRelayErrorResponse response = JsonUtility.FromJson<AzureRelayErrorResponse>(responseJson);
                     if (!string.IsNullOrWhiteSpace(response?.error))
                     {
-                        return $"Azure中转请求失败：{response.error}";
+                        return $"AI 服务请求失败：{response.error}";
                     }
                 }
                 catch (Exception)
@@ -167,7 +167,7 @@ namespace TestFXTrade.Fx.OpenAI
                 }
             }
 
-            return $"Azure中转请求失败：{fallback}";
+            return $"AI 服务请求失败：{fallback}";
         }
 
         [Serializable]

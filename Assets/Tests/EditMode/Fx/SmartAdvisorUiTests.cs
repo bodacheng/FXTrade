@@ -25,6 +25,14 @@ namespace TestFXTrade.Tests.EditMode.Fx
     public sealed class SmartAdvisorUiTests
     {
         [Test]
+        public void LocalizationInitializationDoesNotBlockTheMainThread()
+        {
+            Assert.IsFalse(
+                LocalizationSettings.InitializeSynchronously,
+                "Synchronous Localization initialization uses Addressables.WaitForCompletion and can trigger the iOS watchdog.");
+        }
+
+        [Test]
         public void AdvisorPageAndAddressableWindowsAreSeparatedFromSampleScene()
         {
             GameObject pagePrefab = Resources.Load<GameObject>("Pages/FxTradeAdvisorPage");
@@ -117,7 +125,8 @@ namespace TestFXTrade.Tests.EditMode.Fx
             Assert.NotNull(usageGuideScrollView.GetComponent<ScrollRect>());
             Transform usageGuideBody = usageGuideScrollView.Find("Viewport/Content/Usage Guide Body");
             Assert.NotNull(usageGuideBody);
-            Assert.That(usageGuideBody.GetComponent<TMP_Text>().text, Does.Contain("AzureRelayConfig.json"));
+            Assert.That(usageGuideBody.GetComponent<TMP_Text>().text, Does.Contain("不会同步账户、持仓或订单"));
+            Assert.That(usageGuideBody.GetComponent<TMP_Text>().text, Does.Not.Contain("AzureRelayConfig.json"));
             Assert.NotNull(advicePrefab.GetComponent<FxTradeAdviceWindow>());
             Assert.NotNull(advicePrefab.transform.Find("Advice Page/Advice Header/Close Button"));
             Transform adviceScrollView = advicePrefab.transform.Find("Advice Page/Advice Scroll View");
@@ -265,7 +274,8 @@ namespace TestFXTrade.Tests.EditMode.Fx
             bool guideBackRequested = false;
             FxTradeUsageGuideWindow guideWindow = guideInstance.GetComponent<FxTradeUsageGuideWindow>();
             guideWindow.Initialize(() => guideBackRequested = true);
-            Assert.That(guideWindow.BodyText.text, Does.Contain("AzureRelayConfig.json"));
+            Assert.That(guideWindow.BodyText.text, Does.Contain("SBI保证金 / 更新"));
+            Assert.That(guideWindow.BodyText.text, Does.Not.Contain("AzureRelayConfig.json"));
             guideInstance.transform.Find("Safe Area Content/Usage Guide Page/Usage Guide Header/Back Button").GetComponent<Button>().onClick.Invoke();
             Assert.IsTrue(guideBackRequested);
             UnityEngine.Object.DestroyImmediate(guideInstance);
@@ -322,19 +332,23 @@ namespace TestFXTrade.Tests.EditMode.Fx
         [Test]
         public void PortraitAdvisorUsesTmpAndNonBlockingLoadingWithinReferenceHeight()
         {
+            const string savedLocaleKey = "TestFXTrade.SelectedLocale";
             LocalizationSettings.InitializationOperation.WaitForCompletion();
             Locale originalLocale = LocalizationSettings.SelectedLocale;
+            bool hadSavedLocale = PlayerPrefs.HasKey(savedLocaleKey);
+            string originalSavedLocale = PlayerPrefs.GetString(savedLocaleKey, string.Empty);
             EventSystem existingEventSystem = UnityEngine.Object.FindAnyObjectByType<EventSystem>();
             GameObject host = new GameObject("UI Test Host");
             GameObject canvasObject = null;
 
             try
             {
+                PlayerPrefs.SetString(savedLocaleKey, "zh-Hans");
+                Assert.IsTrue(FxTradeLocalization.TrySelectLocale("zh-Hans", false));
                 FxTradeAdvisorApp app = host.AddComponent<FxTradeAdvisorApp>();
                 MethodInfo awake = typeof(FxTradeAdvisorApp).GetMethod("Awake", BindingFlags.Instance | BindingFlags.NonPublic);
                 Assert.NotNull(awake);
                 awake.Invoke(app, null);
-                Assert.IsTrue(FxTradeLocalization.TrySelectLocale("zh-Hans", false));
                 canvasObject = GameObject.Find("USDJPY Advisor Canvas");
                 Assert.NotNull(canvasObject);
 
@@ -373,7 +387,9 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 bool hasPositionQuantityLabel = false;
                 for (int i = 0; i < visibleTexts.Length; i++)
                 {
-                    if (visibleTexts[i].text.Contains("净建玉数量"))
+                    if (visibleTexts[i].text.Contains("净建玉数量") ||
+                        visibleTexts[i].text.Contains("Net position") ||
+                        visibleTexts[i].text.Contains("ネット建玉数量"))
                     {
                         hasPositionQuantityLabel = true;
                     }
@@ -399,9 +415,14 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 Transform adviceResultButton = safeArea.Find("Advice Access Card/Advice Result Button");
                 Assert.NotNull(adviceResultButton);
                 Assert.IsFalse(adviceResultButton.GetComponent<Button>().interactable);
-                Assert.That(
-                    adviceResultButton.Find("Advice Result Button Text").GetComponent<TMP_Text>().text,
-                    Does.Contain("暂无"));
+                string emptyAdviceText = adviceResultButton
+                    .Find("Advice Result Button Text")
+                    .GetComponent<TMP_Text>()
+                    .text;
+                Assert.IsTrue(
+                    emptyAdviceText.Contains("暂无") ||
+                    emptyAdviceText.Contains("No AI advice") ||
+                    emptyAdviceText.Contains("AI提案"));
 
                 accountInputs[0].SetTextWithoutNotify("1,000,000");
                 accountInputs[1].SetTextWithoutNotify("-10,000");
@@ -569,6 +590,14 @@ namespace TestFXTrade.Tests.EditMode.Fx
             finally
             {
                 LocalizationSettings.SelectedLocale = originalLocale;
+                if (hadSavedLocale)
+                {
+                    PlayerPrefs.SetString(savedLocaleKey, originalSavedLocale);
+                }
+                else
+                {
+                    PlayerPrefs.DeleteKey(savedLocaleKey);
+                }
 
                 if (canvasObject != null)
                 {
@@ -632,7 +661,10 @@ namespace TestFXTrade.Tests.EditMode.Fx
                 LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "button_back", japanese));
             Assert.That(
                 LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "usage_guide_body", english),
-                Does.Contain("AzureRelayConfig.json"));
+                Does.Contain("does not sync an account, positions, or orders"));
+            Assert.That(
+                LocalizationSettings.StringDatabase.GetLocalizedString(FxTradeLocalization.TableName, "usage_guide_body", english),
+                Does.Not.Contain("AzureRelayConfig.json"));
 
             try
             {

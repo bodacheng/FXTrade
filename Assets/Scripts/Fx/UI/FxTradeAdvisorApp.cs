@@ -35,17 +35,18 @@ namespace TestFXTrade.Fx.UI
         private const string BundledChineseFontResourcePath = "Fonts/NotoSansSC-Regular";
         private const string ChineseFontProbeText = "中文交易建议保证金行情规则买卖建玉数量通貨同步均价建仓";
         private const string UsageGuideFallback =
-            "开始使用\n\n" +
-            "1. 在 AzureRelayConfig.json 中配置 Azure 中转地址。供应商密钥只保存在后台。\n\n" +
-            "2. 进入主画面后确认 USD/JPY 行情已更新。可选择 1min、5min、15min 周期，或点击“刷新”手动更新。\n\n" +
-            "3. 输入本金（日元）、当前净建玉数量（通貨单位）和 USD/JPY 建仓均价。正数代表买入持仓，负数代表卖出持仓，0 代表空仓。\n\n" +
-            "4. 点击“SBI规则 / 同步”，读取并保存最新的 SBI FX 规则。\n\n" +
-            "5. 选择“稳健建议”或“积极建议”。积极模式会要求给出明确的买入或卖出方向。\n\n" +
-            "6. 阅读实时图表、技术指标、AI建议与风险提示，再自行决定是否交易。\n\n" +
+            "使用方法\n\n" +
+            "1. 打开主画面，确认 USD/JPY 行情已经更新。可选择 1min、5min、15min 周期，或点击“刷新”手动更新。\n\n" +
+            "2. 输入用于估算的本金（JPY）、当前净建玉数量（通貨）和 USD/JPY 建仓均价。数量为正表示买入持仓，为负表示卖出持仓，0 表示空仓。App 不会读取 SBI 账户，请按实际情况手动填写。\n\n" +
+            "3. 点击“SBI保证金 / 更新”。App 会从 SBI 证券官方页面取得 USD/JPY 当前适用的杠杆倍数、保证金率、每 1 万通貨必要保证金、最小交易单位和适用日期，并保存在本机。这只是更新计算规则，不会同步账户、持仓或订单，也不会执行交易。\n\n" +
+            "4. 更新后的规则会与本金、持仓及行情一起用于 AI 分析。App 还会按 SBI 的必要保证金和最小交易单位重新校验建议；稳健建议把预计保证金控制在本金的 50% 以内，积极建议为 70% 以内。超出限制时，建议数量可能被缩小、方向可能被调整，或改为观望。SBI 调整保证金后，请再次更新。\n\n" +
+            "5. 选择“稳健建议”或“积极建议”。稳健模式在信号不足时可以建议观望；积极模式会要求 AI 在买入和卖出中选择方向，但这不代表信号充分。\n\n" +
+            "6. 查看图表、技术指标、AI 建议和风险提示，再自行决定是否交易。\n\n" +
             "注意事项\n\n" +
-            "• 自动行情每 5 秒更新，K线约每 60 秒刷新。\n" +
-            "• AI建议仅供参考，不构成投资建议。\n" +
-            "• 无法获取行情或建议时，请检查 Azure 中转配置和网络状态。";
+            "• 行情每 5 秒自动更新，K线约每 60 秒刷新。\n" +
+            "• App 不连接 SBI 账户，所有本金和持仓数据均由用户输入。\n" +
+            "• AI 建议仅供参考，不构成投资建议，也不保证符合 SBI 的实际交易审查结果。\n" +
+            "• 无法获取行情、规则或建议时，请检查网络连接后重试。";
         private const NumberStyles UserNumberStyles = NumberStyles.Float | NumberStyles.AllowThousands;
         private static readonly Vector2 MobileReferenceResolution = new Vector2(390f, 844f);
         private static readonly Regex VisibleLotQuantityPattern = new Regex(
@@ -115,7 +116,6 @@ namespace TestFXTrade.Fx.UI
         private SbiFxRuleSnapshot sbiRules;
         private MarketQuote latestQuote;
         private string relayBaseUrl = string.Empty;
-        private string relaySourceLabel = string.Empty;
         private OpenAiTradeAdvice lastAdvice;
         private double lastAdvicePrincipalJpy;
         private double lastAdviceCurrentNetLots;
@@ -202,25 +202,24 @@ namespace TestFXTrade.Fx.UI
         {
             AzureRelaySettings settings = AzureRelaySettings.Load();
             relayBaseUrl = settings.BaseUrl;
-            relaySourceLabel = settings.SourceLabel;
             sbiRules = sbiRuleService.LoadLocal();
             RenderSbiRuleState();
-            RenderRelayState(relaySourceLabel);
+            RenderRelayState();
 
             if (settings.IsConfigured)
             {
                 marketDataProvider = new AzureRelayMarketDataProvider(relayBaseUrl);
                 openAiClient = new AzureRelayTradeAdvisorClient(relayBaseUrl);
-                SetStatus("status_connected", "已连接 Azure 中转，正在刷新 USD/JPY 实时行情。");
+                SetStatus("status_connected", "服务已连接，正在刷新 USD/JPY 实时行情。");
                 nextQuoteRefreshAt = Time.time + QuoteRefreshSeconds;
                 nextCandleRefreshAt = Time.time + CandleRefreshSeconds;
-                SetWarning("warning_secret", "供应商密钥仅保存在后台。AI建议仅供参考，不构成投资建议。");
+                SetWarning("warning_secret", "AI建议仅供参考，不构成投资建议。");
                 _ = RefreshCandlesAndQuoteAsync(true);
                 return;
             }
 
-            SetStatus("status_relay_missing", "尚未配置 Azure 中转地址。");
-            SetWarning("warning_deploy_relay", "请部署 azure-relay，并在 AzureRelayConfig.json 中填写 Function App 地址。");
+            SetStatus("status_relay_missing", "行情与 AI 服务暂不可用。");
+            SetWarning("warning_deploy_relay", "请稍后重试；若问题持续，请联系支持。");
             nextQuoteRefreshAt = float.PositiveInfinity;
             nextCandleRefreshAt = float.PositiveInfinity;
         }
@@ -630,7 +629,7 @@ namespace TestFXTrade.Fx.UI
             Transform headerBar = CreateHeaderBar(headerCard);
             Transform brandBlock = CreateBrandBlock(headerBar);
             AddHeader(brandBlock, "USD/JPY 交易助手");
-            marketSourceText = AddCompactInfoText(brandBlock, "正在读取 Azure 中转配置……");
+            marketSourceText = AddCompactInfoText(brandBlock, "正在连接行情与 AI 服务……");
 
             Transform headerActions = CreateHeaderActions(headerBar);
             BuildLoadingIndicator(headerActions);
@@ -683,7 +682,7 @@ namespace TestFXTrade.Fx.UI
             netPositionInput = AddInput(smartFields, "净建玉数量", "0", false, TMP_InputField.ContentType.Standard);
             positionEntryPriceInput = AddInput(smartFields, "USD/JPY均价", string.Empty, false, TMP_InputField.ContentType.DecimalNumber);
 
-            syncSbiRulesButton = AddButton(smartFields, "SBI规则", "同步");
+            syncSbiRulesButton = AddButton(smartFields, "SBI保证金", "更新");
 
             Transform adviceActions = CreateCompactFieldRow(advisorCard, "AI Advice Actions");
             requestAiAdviceButton = AddButton(adviceActions, "稳健建议", "获取");
@@ -691,7 +690,7 @@ namespace TestFXTrade.Fx.UI
             aggressiveAiAdviceButton = AddButton(adviceActions, "积极建议", "买/卖必选");
             aggressiveAiAdviceButton.targetGraphic.color = new Color32(175, 101, 52, 255);
 
-            sbiRulesText = AddCompactInfoText(advisorCard, "SBI规则：尚未同步。");
+            sbiRulesText = AddCompactInfoText(advisorCard, "SBI保证金规则：尚未更新。");
         }
 
         private void BuildOutputColumn(Transform parent)
@@ -756,7 +755,7 @@ namespace TestFXTrade.Fx.UI
         private void RefreshLocalizedDynamicState()
         {
             RenderSbiRuleState();
-            RenderRelayState(relaySourceLabel);
+            RenderRelayState();
 
             if (latestQuote != null)
             {
@@ -867,7 +866,7 @@ namespace TestFXTrade.Fx.UI
                     case "USD/JPY 交易助手":
                         FxTradeLocalization.Bind(text, "app_title", text.text);
                         break;
-                    case "正在读取 Azure 中转配置……":
+                    case "正在连接行情与 AI 服务……":
                         FxTradeLocalization.Bind(text, "source_loading", text.text);
                         break;
                     case "交易对":
@@ -927,10 +926,10 @@ namespace TestFXTrade.Fx.UI
                     case "USD/JPY均价":
                         FxTradeLocalization.Bind(text, "label_entry_price", text.text);
                         break;
-                    case "SBI规则":
+                    case "SBI保证金":
                         FxTradeLocalization.Bind(text, "label_sbi_rules", text.text);
                         break;
-                    case "同步":
+                    case "更新":
                         FxTradeLocalization.Bind(text, "button_sync", text.text);
                         break;
                     case "稳健建议":
@@ -945,7 +944,7 @@ namespace TestFXTrade.Fx.UI
                     case "买/卖必选":
                         FxTradeLocalization.Bind(text, "button_buy_sell_required", text.text);
                         break;
-                    case "SBI规则：尚未同步。":
+                    case "SBI保证金规则：尚未更新。":
                         FxTradeLocalization.Bind(text, "sbi_not_synced_short", text.text);
                         break;
                     case "正在等待 USD/JPY 实时行情":
@@ -954,7 +953,7 @@ namespace TestFXTrade.Fx.UI
                     case "行情指标将在此显示。":
                         FxTradeLocalization.Bind(text, "metrics_waiting", text.text);
                         break;
-                    case "输入本金和净建玉数量，同步SBI规则后即可获取AI建议。":
+                    case "输入本金和净建玉数量，更新SBI保证金规则后即可获取AI建议。":
                         FxTradeLocalization.Bind(text, "advice_initial", text.text);
                         break;
                     case "选项":
@@ -987,8 +986,8 @@ namespace TestFXTrade.Fx.UI
             {
                 if (string.IsNullOrWhiteSpace(relayBaseUrl))
                 {
-                    SetStatus("status_relay_missing", "尚未配置 Azure 中转地址。");
-                    SetWarning("warning_check_config", "请检查 AzureRelayConfig.json。");
+                    SetStatus("status_relay_missing", "行情与 AI 服务暂不可用。");
+                    SetWarning("warning_check_config", "请检查网络连接后重试。");
                     return;
                 }
 
@@ -1054,8 +1053,8 @@ namespace TestFXTrade.Fx.UI
             {
                 if (string.IsNullOrWhiteSpace(relayBaseUrl))
                 {
-                    SetStatus("status_relay_missing", "尚未配置 Azure 中转地址。");
-                    SetWarning("warning_check_config", "请检查 AzureRelayConfig.json。");
+                    SetStatus("status_relay_missing", "行情与 AI 服务暂不可用。");
+                    SetWarning("warning_check_config", "请检查网络连接后重试。");
                     return;
                 }
 
@@ -1201,24 +1200,24 @@ namespace TestFXTrade.Fx.UI
 
             sbiSyncInFlight = true;
             syncSbiRulesButton.interactable = false;
-            BeginLoading("loading_sbi", "正在同步 SBI FX 最新规则");
+            BeginLoading("loading_sbi", "正在更新 SBI FX 保证金规则");
             CancellationToken token = GetAdvisoryToken();
 
             try
             {
-                SetStatus("status_reading_sbi", "正在从SBI证券官方页面读取最新FX规则……");
+                SetStatus("status_reading_sbi", "正在从SBI证券官方页面获取USD/JPY保证金规则……");
                 sbiRules = await sbiRuleService.RefreshAsync(token);
                 RenderSbiRuleState();
-                SetStatus("status_sbi_saved", "SBI FX规则已保存到本地：{0:HH:mm:ss}", DateTime.Now);
-                SetWarning("warning_sbi_official", "已采用官方25倍杠杆保证金表。AI建议仅供参考，不构成投资建议。");
+                SetStatus("status_sbi_saved", "SBI FX保证金规则已保存到本机：{0:HH:mm:ss}", DateTime.Now);
+                SetWarning("warning_sbi_official", "已更新USD/JPY的杠杆、必要保证金、最小交易单位和适用日期。");
             }
             catch (OperationCanceledException)
             {
-                SetStatus("status_sbi_cancelled", "已取消SBI规则同步。");
+                SetStatus("status_sbi_cancelled", "已取消SBI保证金规则更新。");
             }
             catch (Exception ex)
             {
-                SetStatus("status_sbi_failed", "SBI FX规则同步失败。");
+                SetStatus("status_sbi_failed", "SBI FX保证金规则更新失败。");
                 SetWarning("warning_error_detail", "错误：{0}", ex.Message);
             }
             finally
@@ -1247,14 +1246,14 @@ namespace TestFXTrade.Fx.UI
             if (string.IsNullOrWhiteSpace(relayBaseUrl) || openAiClient == null)
             {
                 SetStatus("status_ai_unavailable", "无法请求AI建议。");
-                SetWarning("warning_configure_relay", "请先配置并部署 Azure 中转服务。");
+                SetWarning("warning_configure_relay", "请稍后重试；若问题持续，请联系支持。");
                 return;
             }
 
             if (sbiRules == null || !sbiRules.IsUsable)
             {
-                SetStatus("status_sync_sbi_first", "请先同步SBI FX规则。");
-                SetWarning("warning_sync_sbi", "点击“SBI规则 / 同步”，成功保存官方规则后再获取AI建议。");
+                SetStatus("status_sync_sbi_first", "请先更新SBI FX保证金规则。");
+                SetWarning("warning_sync_sbi", "点击“SBI保证金 / 更新”，取得官方规则后再获取AI建议。");
                 return;
             }
 
@@ -1298,8 +1297,8 @@ namespace TestFXTrade.Fx.UI
                 SetStatus(
                     aggressive ? "status_requesting_openai_aggressive" : "status_requesting_openai_conservative",
                     aggressive
-                        ? "正在通过 Azure 请求 OpenAI（积极策略）……"
-                        : "正在通过 Azure 请求 OpenAI（稳健策略）……");
+                        ? "正在请求 OpenAI（积极策略）……"
+                        : "正在请求 OpenAI（稳健策略）……");
                 SetLoadingTask(
                     aggressive ? "status_wait_openai_aggressive" : "status_wait_openai_conservative",
                     aggressive
@@ -1985,14 +1984,14 @@ namespace TestFXTrade.Fx.UI
                 FxTradeLocalization.Bind(
                     sbiRulesText,
                     "sbi_not_synced",
-                    "SBI规则：尚未同步，请先读取官方最新规则。");
+                    "SBI保证金规则：尚未更新，请先取得官方最新规则。");
                 return;
             }
 
             FxTradeLocalization.Bind(
                 sbiRulesText,
                 "sbi_summary",
-                "SBI规则：{0}倍 / {1:0.##}% / 每1万通貨 {2:N0} JPY / 适用 {3} / 最小 {4:N0} 通貨",
+                "SBI保证金规则：{0}倍 / {1:0.##}% / 每1万通貨 {2:N0} JPY / 适用 {3} / 最小 {4:N0} 通貨",
                 sbiRules.Leverage,
                 sbiRules.MarginRatePercent,
                 sbiRules.RequiredMarginPer10000Jpy,
@@ -2041,20 +2040,7 @@ namespace TestFXTrade.Fx.UI
             return intervalDropdown.options[index].text;
         }
 
-        private static string LocalizeRelaySource(string sourceLabel)
-        {
-            switch (sourceLabel)
-            {
-                case "environment variable":
-                    return FxTradeLocalization.Get("source_environment", "环境变量");
-                case "Resources/AzureRelayConfig.json":
-                    return FxTradeLocalization.Get("source_app_config", "应用配置");
-                default:
-                    return sourceLabel;
-            }
-        }
-
-        private void RenderRelayState(string sourceLabel)
+        private void RenderRelayState()
         {
             if (marketSourceText == null)
             {
@@ -2066,15 +2052,14 @@ namespace TestFXTrade.Fx.UI
                 FxTradeLocalization.Bind(
                     marketSourceText,
                     "relay_not_configured",
-                    "行情与AI：尚未配置 Azure 中转");
+                    "行情与AI服务：暂不可用");
                 return;
             }
 
             FxTradeLocalization.Bind(
                 marketSourceText,
                 "relay_configured",
-                "行情与AI：Azure后台中转（{0}）",
-                LocalizeRelaySource(sourceLabel));
+                "行情与AI服务：已连接");
         }
 
         private void CancelMarketDataRequests()

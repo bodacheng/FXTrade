@@ -23,7 +23,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 3090145280
-    m_Localized: Reading Azure relay configuration...
+    m_Localized: Connecting to market data and AI services...
     m_Metadata:
       m_Items: []
   - m_Id: 3090145281
@@ -67,11 +67,11 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 3090145291
-    m_Localized: SBI rules
+    m_Localized: SBI margin
     m_Metadata:
       m_Items: []
   - m_Id: 3090145292
-    m_Localized: Sync
+    m_Localized: Update
     m_Metadata:
       m_Items: []
   - m_Id: 3090145293
@@ -91,7 +91,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 3090145297
-    m_Localized: 'SBI rules: not synced.'
+    m_Localized: 'SBI margin rules: not updated.'
     m_Metadata:
       m_Items: []
   - m_Id: 3090145298
@@ -103,8 +103,8 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 3090145300
-    m_Localized: Enter capital and net position, then sync SBI rules to request AI
-      advice.
+    m_Localized: Enter capital and net position, then update SBI margin rules to
+      request AI advice.
     m_Metadata:
       m_Items: []
   - m_Id: 3090145301
@@ -112,20 +112,19 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 3090145302
-    m_Localized: Azure relay connected. Refreshing live USD/JPY data.
+    m_Localized: Service connected. Refreshing live USD/JPY data.
     m_Metadata:
       m_Items: []
   - m_Id: 3090145303
-    m_Localized: Provider keys remain on the backend. AI advice is informational
-      and not investment advice.
+    m_Localized: AI advice is informational and not investment advice.
     m_Metadata:
       m_Items: []
   - m_Id: 3090145304
-    m_Localized: Azure relay URL is not configured.
+    m_Localized: Market data and AI services are unavailable.
     m_Metadata:
       m_Items: []
   - m_Id: 3090145305
-    m_Localized: Deploy azure-relay and set the Function App URL in AzureRelayConfig.json.
+    m_Localized: Try again later. If the problem continues, contact support.
     m_Metadata:
       m_Items: []
   - m_Id: 3090145306
@@ -137,7 +136,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 3090145308
-    m_Localized: Check AzureRelayConfig.json.
+    m_Localized: Check your network connection and try again.
     m_Metadata:
       m_Items: []
   - m_Id: 3090145309
@@ -201,28 +200,28 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 3094339590
-    m_Localized: Syncing the latest SBI FX rules
+    m_Localized: Updating SBI FX margin rules
     m_Metadata:
       m_Items: []
   - m_Id: 3094339591
-    m_Localized: Reading the latest FX rules from the official SBI Securities page...
+    m_Localized: Getting USD/JPY margin rules from the official SBI Securities page...
     m_Metadata:
       m_Items: []
   - m_Id: 3094339592
-    m_Localized: 'SBI FX rules saved locally: {0:HH:mm:ss}'
+    m_Localized: 'SBI FX margin rules saved on this device: {0:HH:mm:ss}'
     m_Metadata:
       m_Items: []
   - m_Id: 3094339593
-    m_Localized: Using the official 25x leverage margin table. AI advice is informational
-      and not investment advice.
+    m_Localized: Updated USD/JPY leverage, required margin, minimum order size, and
+      effective date.
     m_Metadata:
       m_Items: []
   - m_Id: 3094339594
-    m_Localized: SBI rule sync cancelled.
+    m_Localized: SBI margin rule update cancelled.
     m_Metadata:
       m_Items: []
   - m_Id: 3094339595
-    m_Localized: SBI FX rule sync failed.
+    m_Localized: SBI FX margin rule update failed.
     m_Metadata:
       m_Items: []
   - m_Id: 3094339596
@@ -230,15 +229,15 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 3094339597
-    m_Localized: Configure and deploy the Azure relay first.
+    m_Localized: Try again later. If the problem continues, contact support.
     m_Metadata:
       m_Items: []
   - m_Id: 3094339598
-    m_Localized: Sync the SBI FX rules first.
+    m_Localized: Update the SBI FX margin rules first.
     m_Metadata:
       m_Items: []
   - m_Id: 3094339599
-    m_Localized: Select 'SBI rules / Sync' and save the official rules before requesting
+    m_Localized: Select 'SBI margin / Update' to get the official rules before requesting
       AI advice.
     m_Metadata:
       m_Items: []
@@ -265,11 +264,11 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 3094339605
-    m_Localized: Requesting OpenAI through Azure (aggressive strategy)...
+    m_Localized: Requesting OpenAI (aggressive strategy)...
     m_Metadata:
       m_Items: []
   - m_Id: 3094339606
-    m_Localized: Requesting OpenAI through Azure (conservative strategy)...
+    m_Localized: Requesting OpenAI (conservative strategy)...
     m_Metadata:
       m_Items: []
   - m_Id: 3094339607
@@ -297,8 +296,8 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 3094339613
-    m_Localized: No new AI advice was received. Keep your existing position judgment
-      and check the configuration.
+    m_Localized: No new AI advice was received. Keep your existing position judgment,
+      check your network, and try again.
     m_Metadata:
       m_Items: []
   - m_Id: 3094339614
@@ -390,12 +389,12 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 3094339633
-    m_Localized: 'SBI rules: not synced. Load the latest official rules first.'
+    m_Localized: 'SBI margin rules: not updated. Get the latest official rules first.'
     m_Metadata:
       m_Items: []
   - m_Id: 3094339634
-    m_Localized: 'SBI rules: {0}x / {1:0.##}% / {2:N0} JPY per 10,000 currency units
-      / effective {3} / minimum {4:N0} currency units'
+    m_Localized: 'SBI margin rules: {0}x / {1:0.##}% / {2:N0} JPY per 10,000
+      currency units / effective {3} / minimum {4:N0} currency units'
     m_Metadata:
       m_Items: []
   - m_Id: 3094339635
@@ -407,11 +406,11 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 3094339637
-    m_Localized: 'Market data and AI: Azure relay not configured'
+    m_Localized: 'Market data and AI services: unavailable'
     m_Metadata:
       m_Items: []
   - m_Id: 3094339638
-    m_Localized: 'Market data and AI: Azure backend relay ({0})'
+    m_Localized: 'Market data and AI services: connected'
     m_Metadata:
       m_Items: []
   - m_Id: 3094339639
@@ -475,7 +474,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 3094339654
-    m_Localized: "Getting Started\n\n1. Configure the Azure relay URL in AzureRelayConfig.json. Provider keys remain on the backend only.\n\n2. After opening the main screen, confirm that the USD/JPY quote has updated. Select 1min, 5min, or 15min, or tap Refresh to update manually.\n\n3. Enter capital in JPY, the current net position quantity in currency units, and the USD/JPY entry price. A positive quantity is long, a negative quantity is short, and 0 is flat.\n\n4. Tap SBI Rules / Sync to retrieve and save the latest SBI FX rules.\n\n5. Choose Conservative Advice or Aggressive Advice. Aggressive mode requires an explicit buy or sell direction.\n\n6. Review the live chart, technical indicators, AI advice, and risk notices before making your own trading decision.\n\nNotes\n\n\u2022 Quotes update every 5 seconds; candles refresh about every 60 seconds.\n\u2022 AI advice is informational and is not investment advice.\n\u2022 If quotes or advice are unavailable, check the Azure relay configuration and network status."
+    m_Localized: "How to Use\n\n1. Open the main screen and confirm that the USD/JPY quote has updated. Select 1min, 5min, or 15min, or tap Refresh to update manually.\n\n2. Enter the capital in JPY used for the estimate, your current net position in currency units, and the USD/JPY entry price. A positive quantity is long, a negative quantity is short, and 0 is flat. The app does not read your SBI Securities account, so enter the actual values manually.\n\n3. Tap SBI Margin / Update. The app gets the currently applicable USD/JPY leverage, margin rate, required margin per 10,000 currency units, minimum order size, and effective date from the official SBI Securities page and saves them on this device. This only updates calculation rules; it does not sync an account, positions, or orders, and it never places trades.\n\n4. The updated rules are used with your capital, position, and market data for AI analysis. The app also checks the result against SBI required margin and minimum order size. Estimated margin is capped at 50% of capital for Conservative Advice and 70% for Aggressive Advice. If a limit is exceeded, the size may be reduced, the direction may be adjusted, or the result may become Hold. Update again after SBI changes its margin requirements.\n\n5. Choose Conservative Advice or Aggressive Advice. Conservative mode can return Hold when evidence is weak. Aggressive mode requires the AI to choose Buy or Sell, but that does not mean the signal is strong.\n\n6. Review the chart, technical indicators, AI advice, and risk notices before making your own trading decision.\n\nNotes\n\n• Quotes update every 5 seconds; candles refresh about every 60 seconds.\n• The app does not connect to an SBI Securities account. All capital and position data is entered by the user.\n• AI advice is informational, is not investment advice, and is not guaranteed to pass SBI Securities' actual order checks.\n• If market data, rules, or advice are unavailable, check your network connection and try again."
     m_Metadata:
       m_Items: []
   - m_Id: 3094339655

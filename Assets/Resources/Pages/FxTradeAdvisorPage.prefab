@@ -688,7 +688,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "SBI\u89C4\u5219\uFF1A\u5C1A\u672A\u540C\u6B65\u3002"
+  m_text: "SBI保证金规则：尚未更新。"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 4c7c735612c2d4c318cee44941091be7, type: 2}
   m_sharedMaterial: {fileID: -234729512962230354, guid: 4c7c735612c2d4c318cee44941091be7, type: 2}
@@ -3675,7 +3675,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\u540C\u6B65"
+  m_text: "更新"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 4c7c735612c2d4c318cee44941091be7, type: 2}
   m_sharedMaterial: {fileID: -234729512962230354, guid: 4c7c735612c2d4c318cee44941091be7, type: 2}
@@ -4921,7 +4921,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "SBI\u89C4\u5219"
+  m_text: "SBI保证金"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 4c7c735612c2d4c318cee44941091be7, type: 2}
   m_sharedMaterial: {fileID: -234729512962230354, guid: 4c7c735612c2d4c318cee44941091be7, type: 2}
@@ -5647,7 +5647,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\u6B63\u5728\u8BFB\u53D6 Azure \u4E2D\u8F6C\u914D\u7F6E\u2026\u2026"
+  m_text: "正在连接行情与 AI 服务……"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 4c7c735612c2d4c318cee44941091be7, type: 2}
   m_sharedMaterial: {fileID: -234729512962230354, guid: 4c7c735612c2d4c318cee44941091be7, type: 2}

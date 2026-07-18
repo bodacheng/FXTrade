@@ -395,19 +395,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\u5F00\u59CB\u4F7F\u7528\n\n1. \u5728 AzureRelayConfig.json \u4E2D\u914D\u7F6E
-    Azure \u4E2D\u8F6C\u5730\u5740\u3002\u4F9B\u5E94\u5546\u5BC6\u94A5\u53EA\u4FDD\u5B58\u5728\u540E\u53F0\u3002\n\n2.
-    \u8FDB\u5165\u4E3B\u753B\u9762\u540E\u786E\u8BA4 USD/JPY \u884C\u60C5\u5DF2\u66F4\u65B0\u3002\u53EF\u9009\u62E9
-    1min\u30015min\u300115min \u5468\u671F\uFF0C\u6216\u70B9\u51FB\u201C\u5237\u65B0\u201D\u624B\u52A8\u66F4\u65B0\u3002\n\n3.
-    \u8F93\u5165\u672C\u91D1\uFF08\u65E5\u5143\uFF09\u3001\u5F53\u524D\u51C0\u5EFA\u7389\u6570\u91CF\uFF08\u901A\u8CA8\u5355\u4F4D\uFF09\u548C
-    USD/JPY \u5EFA\u4ED3\u5747\u4EF7\u3002\u6B63\u6570\u4EE3\u8868\u4E70\u5165\u6301\u4ED3\uFF0C\u8D1F\u6570\u4EE3\u8868\u5356\u51FA\u6301\u4ED3\uFF0C0
-    \u4EE3\u8868\u7A7A\u4ED3\u3002\n\n4. \u70B9\u51FB\u201CSBI\u89C4\u5219 / \u540C\u6B65\u201D\uFF0C\u8BFB\u53D6\u5E76\u4FDD\u5B58\u6700\u65B0\u7684
-    SBI FX \u89C4\u5219\u3002\n\n5. \u9009\u62E9\u201C\u7A33\u5065\u5EFA\u8BAE\u201D\u6216\u201C\u79EF\u6781\u5EFA\u8BAE\u201D\u3002\u79EF\u6781\u6A21\u5F0F\u4F1A\u8981\u6C42\u7ED9\u51FA\u660E\u786E\u7684\u4E70\u5165\u6216\u5356\u51FA\u65B9\u5411\u3002\n\n6.
-    \u9605\u8BFB\u5B9E\u65F6\u56FE\u8868\u3001\u6280\u672F\u6307\u6807\u3001AI\u5EFA\u8BAE\u4E0E\u98CE\u9669\u63D0\u793A\uFF0C\u518D\u81EA\u884C\u51B3\u5B9A\u662F\u5426\u4EA4\u6613\u3002\n\n\u6CE8\u610F\u4E8B\u9879\n\n\u2022
-    \u81EA\u52A8\u884C\u60C5\u6BCF 5 \u79D2\u66F4\u65B0\uFF0CK\u7EBF\u7EA6\u6BCF
-    60 \u79D2\u5237\u65B0\u3002\n\u2022 AI\u5EFA\u8BAE\u4EC5\u4F9B\u53C2\u8003\uFF0C\u4E0D\u6784\u6210\u6295\u8D44\u5EFA\u8BAE\u3002\n\u2022
-    \u65E0\u6CD5\u83B7\u53D6\u884C\u60C5\u6216\u5EFA\u8BAE\u65F6\uFF0C\u8BF7\u68C0\u67E5
-    Azure \u4E2D\u8F6C\u914D\u7F6E\u548C\u7F51\u7EDC\u72B6\u6001\u3002"
+  m_text: "使用方法\n\n1. 打开主画面，确认 USD/JPY 行情已经更新。可选择 1min、5min、15min 周期，或点击“刷新”手动更新。\n\n2. 输入用于估算的本金（JPY）、当前净建玉数量（通貨）和 USD/JPY 建仓均价。数量为正表示买入持仓，为负表示卖出持仓，0 表示空仓。App 不会读取 SBI 账户，请按实际情况手动填写。\n\n3. 点击“SBI保证金 / 更新”。App 会从 SBI 证券官方页面取得 USD/JPY 当前适用的杠杆倍数、保证金率、每 1 万通貨必要保证金、最小交易单位和适用日期，并保存在本机。这只是更新计算规则，不会同步账户、持仓或订单，也不会执行交易。\n\n4. 更新后的规则会与本金、持仓及行情一起用于 AI 分析。App 还会按 SBI 的必要保证金和最小交易单位重新校验建议；稳健建议把预计保证金控制在本金的 50% 以内，积极建议为 70% 以内。超出限制时，建议数量可能被缩小、方向可能被调整，或改为观望。SBI 调整保证金后，请再次更新。\n\n5. 选择“稳健建议”或“积极建议”。稳健模式在信号不足时可以建议观望；积极模式会要求 AI 在买入和卖出中选择方向，但这不代表信号充分。\n\n6. 查看图表、技术指标、AI 建议和风险提示，再自行决定是否交易。\n\n注意事项\n\n• 行情每 5 秒自动更新，K线约每 60 秒刷新。\n• App 不连接 SBI 账户，所有本金和持仓数据均由用户输入。\n• AI 建议仅供参考，不构成投资建议，也不保证符合 SBI 的实际交易审查结果。\n• 无法获取行情、规则或建议时，请检查网络连接后重试。"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 4c7c735612c2d4c318cee44941091be7, type: 2}
   m_sharedMaterial: {fileID: -234729512962230354, guid: 4c7c735612c2d4c318cee44941091be7, type: 2}
